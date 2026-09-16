@@ -3,6 +3,113 @@
 Dated log of build/review/repair decisions for Glimmerdash. Newest entries
 first.
 
+## 2026-09-16 - Batch `06-real-pathfinding-for-enemies`
+
+### Decisions
+
+- **New pure module, not folded into `enemies.ts`**: `src/core/pathfinding.ts`
+  is a standalone module with zero DOM/canvas imports, exporting `findPath`
+  (breadth-first search) and `nextStepTowards` (its first-step convenience
+  wrapper). Keeping it separate from `enemies.ts` matches the existing
+  pattern of small, single-purpose core modules (`grid.ts`, `collisions.ts`,
+  etc.) and makes the BFS itself directly unit-testable without going
+  through enemy-stepping machinery.
+- **Reused existing maze primitives instead of duplicating them**: `isWall`
+  and `wrapCol` from `grid.ts` are imported directly, so wall-blocking and
+  horizontal tunnel wrap behave identically to every other place in the
+  codebase that walks the grid (`neighbours`, `chooseDirectionTowards`,
+  etc.) - there is exactly one definition of "is this tile passable" for
+  walls/wrap, just extended with a den-aware check local to pathfinding.
+- **Den handling**: den tiles other than `grid.denDoor` are impassable by
+  default (`forbidDen` defaults to `true`), matching the task's requirement
+  that outside navigation not cut through the ghost house. The door tile
+  itself is always passable regardless of the flag, since it is the
+  intended den-to-maze connection point. `forbidDen: false` exists for
+  completeness/testing (an enemy that's allowed to cut through) but nothing
+  in `enemies.ts` currently passes it.
+- **Fixed neighbour order (up, left, down, right)**: chosen arbitrarily but
+  fixed, so that when multiple shortest paths tie in length, `findPath`
+  deterministically and reproducibly picks the same one every time (needed
+  for both testability and for enemy movement to not flicker between
+  equally-good routes). This differs from `grid.ts`'s `neighbours()` order
+  (up, down, left, right) - reordering it for BFS determinism is not a
+  change to maze/wall logic, just to traversal order, so `grid.ts` was left
+  untouched.
+- **Allocation-light BFS**: visited/`cameFrom` are flat `Uint8Array`/
+  `Int32Array` indexed by `row * cols + col` (no per-tile object allocation,
+  no string-keyed `Set`/`Map`), and the queue is a plain array with a `head`
+  index instead of `Array.shift()`, so it's cheap enough to call once per
+  enemy per tile-centre decision without a perceptible cost at 60 ticks/sec.
+- **Inclusive path convention**: `findPath` returns both endpoints inclusive
+  (`from` at index 0, `to` at the end); `from === to` returns the
+  single-element array `[from]` rather than `[]`, and `nextStepTowards`
+  returns `null` whenever the path has fewer than two tiles (unreachable or
+  already there) rather than distinguishing those two cases, since Ember's
+  fallback-to-greedy behaviour treats them identically.
+- **Only Ember (chase) was switched to BFS, not Marsh (ambush)**: the batch
+  instructions made ambush's pathfinder use optional ("may also use");
+  leaving Frost (scatter), Marsh (ambush), and Dusk (wander) on their
+  existing greedy/random logic keeps the four Duskwisps visibly distinct in
+  play and keeps this batch's diff to `enemies.ts` minimal - one new
+  `else if` branch in `stepEnemy` for `behaviour === 'chase' && !inDen`,
+  nothing else changed. The existing greedy heuristic
+  (`chooseDirectionTowards`) is kept as Ember's fallback for the case where
+  `nextStepTowards` returns `null` (target unreachable under den
+  restrictions), and remains untouched/reused as-is for every other
+  behaviour and for path-to-the-den-door movement while `inDen`.
+- **`src/main.ts` untouched**: this batch is core-logic-only; rendering
+  already draws each Duskwisp from its `EnemyState.pos`/`direction`, which
+  are unaffected in shape by how the direction was chosen internally.
+
+### What was built
+
+- `src/core/pathfinding.ts`: `findPath` (deterministic BFS shortest path,
+  wall/tunnel-wrap/den-aware) and `nextStepTowards` (first-move direction
+  along that path).
+- `src/core/enemies.ts`: `stepEnemy`'s per-tile-centre direction choice now
+  special-cases `chase` behaviour outside the den to call
+  `nextStepTowards`, falling back to `chooseDirectionTowards` (the existing
+  greedy heuristic) only when no path exists. Scatter, ambush, wander, and
+  in-den door-seeking movement are unchanged.
+- `tests/core/pathfinding.test.ts`: 13 new Vitest tests - straight corridor,
+  a wall/den detour with a hand-counted shortest length (10 tiles) plus its
+  deterministic tie-break, unreachable target, `from === to`, tunnel wrap
+  taken because it's shorter, den avoidance by default/explicit/disabled,
+  cross-call determinism, and `nextStepTowards` matching `findPath`'s first
+  step (including its two null cases).
+- `tests/core/enemies.test.ts`: 2 new tests showing the greedy heuristic
+  alone would step Ember into a den dead end (`down`, minimal Manhattan
+  distance to the door) while `stepEnemy` with the new BFS-backed chase
+  logic instead steps `left`, matching the true shortest route around the
+  den.
+- `README.md`: Status section now mentions the breadth-first pathfinding
+  module and that Ember uses it (with the greedy heuristic only as a
+  fallback), rather than implying chase is purely heuristic-driven.
+
+### Test results
+
+- `npm run typecheck` (`tsc --noEmit`): exited 0, no errors.
+- `npm test` (`vitest run`): exited 0 - **9 test files, 99 tests, all
+  passed** (84 pre-existing + 13 in `pathfinding.test.ts` + 2 in
+  `enemies.test.ts`).
+- `npm run build` (`vite build`): exited 0, produced `dist/`.
+- `npx playwright test`: exited 0 - **3 passed (2.6s)**, unaffected by this
+  batch since `src/main.ts` was not touched:
+  ```
+  Running 3 tests using 1 worker
+
+    ✓  1 [chromium] › tests/e2e/smoke.spec.ts:3:1 › renders the maze, canvas, and initial HUD (255ms)
+    ✓  2 [chromium] › tests/e2e/smoke.spec.ts:16:1 › keyboard input moves the player and collects a pellet (364ms)
+    ✓  3 [chromium] › tests/e2e/smoke.spec.ts:41:1 › restart resets score, lives, and game-over state (339ms)
+
+    3 passed (2.6s)
+  ```
+
+### External generation prompts
+
+None used - no external/Lovable/Fable generation was used for this batch;
+all code was written directly.
+
 ## 2026-09-16 - Batch `05-e2e-headless-smoke-test`
 
 ### Decisions

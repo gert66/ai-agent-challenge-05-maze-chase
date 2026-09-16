@@ -96,6 +96,12 @@ docs/
   ambush/wander behaviours, collisions, a Bloomburst power-up with a timed
   frighten mode, pellet/power-pellet/Bloomburst collection, scoring, lives,
   game-over, and level-complete detection (`src/core/`).
+- Real navigation, not just heuristic steering: `src/core/pathfinding.ts`
+  runs a deterministic breadth-first search over the maze (respecting walls,
+  the horizontal tunnel wrap, and den restrictions) to find true
+  shortest-path routes. Ember, the chase Duskwisp, uses this at every tile
+  centre to hunt Glim, falling back to a greedy distance heuristic only when
+  no path exists.
 - Seeded PRNG (`mulberry32`) driving all enemy tie-breaking/wandering.
 - A pure, unit-tested fixed-timestep accumulator (`src/core/loop.ts`)
   decoupling the simulation tick rate from the display refresh rate.

@@ -10,6 +10,7 @@
  */
 
 import { isWall, wrapCol, type Grid } from './grid';
+import { nextStepTowards } from './pathfinding';
 import type { Rng } from './rng';
 import { ENEMY_SPEED_TILES_PER_SEC, type EnemyKey } from './theme';
 import type { Direction, EnemyBehaviourId, EnemyState, TilePos, Vec2 } from './types';
@@ -278,10 +279,15 @@ export function stepEnemy(
       }
 
       const target = inDen ? grid.denDoor : computeEnemyTarget(grid, { ...enemy, patrolIndex }, context);
-      direction =
-        target === null
-          ? chooseWanderDirection(grid, tile, direction, rng)
-          : chooseDirectionTowards(grid, tile, direction, target, rng);
+      if (target === null) {
+        direction = chooseWanderDirection(grid, tile, direction, rng);
+      } else if (!inDen && enemy.behaviour === 'chase') {
+        // Ember hunts via real shortest-path navigation; the greedy
+        // heuristic is only a fallback for the rare case of no path.
+        direction = nextStepTowards(grid, tile, target) ?? chooseDirectionTowards(grid, tile, direction, target, rng);
+      } else {
+        direction = chooseDirectionTowards(grid, tile, direction, target, rng);
+      }
     }
 
     if (direction === 'none') break;

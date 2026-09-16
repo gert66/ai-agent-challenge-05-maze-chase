@@ -171,6 +171,30 @@ describe('stepEnemy - scatter patrol advancing between corners', () => {
   });
 });
 
+describe('chase behaviour uses real pathfinding instead of only the greedy heuristic', () => {
+  // From (4,1), the den door at (4,2) is one step closer (Manhattan distance)
+  // to the target (4,4) than either side corridor, so the greedy heuristic
+  // steps into the den - a dead end under den-avoidance, since the den's
+  // only other tiles are blocked and require backtracking. The true
+  // shortest route goes left (or right) around the den instead.
+  it('the greedy heuristic alone would step toward the den dead end', () => {
+    const rng = mulberry32(1);
+    const greedy = chooseDirectionTowards(grid, { col: 4, row: 1 }, 'none', { col: 4, row: 4 }, rng);
+    expect(greedy).toBe('down');
+  });
+
+  it('the chaser instead follows the BFS shortest path around the den', () => {
+    const enemy = baseEnemy({ behaviour: 'chase', pos: { x: 4, y: 1 }, inDen: false });
+    const context = { playerTile: { col: 4, row: 4 }, playerDirection: 'none' as const };
+
+    const result = stepEnemy(grid, enemy, context, mulberry32(1), 1);
+
+    expect(result.direction).not.toBe('down');
+    expect(result.direction).toBe('left');
+    expect(result.pos).toEqual({ x: 3, y: 1 });
+  });
+});
+
 describe('stepEnemy - den-to-door exit', () => {
   it('paths through the door tile and resumes its normal behaviour once outside the den', () => {
     const enemy = baseEnemy({
