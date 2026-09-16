@@ -3,6 +3,116 @@
 Dated log of build/review/repair decisions for Glimmerdash. Newest entries
 first.
 
+## 2026-09-16 - Batch `09-final-verification-and-report`
+
+### Decisions
+
+- **Verification-and-documentation batch only, scope held strictly**: no
+  dependency changes, no `src/core/*` changes, no redesign. `dist/` and
+  `test-results/` were deleted before verifying (both gitignored/untracked)
+  so every command below ran from a genuinely clean state, not stale
+  build/test output from batch `08`.
+- **One small addition to `tests/e2e/smoke.spec.ts`**: a shared
+  `pageErrors` array populated by `page.on('pageerror', ...)` and
+  `page.on('console', msg => msg.type() === 'error' ? ... )` listeners
+  registered in a new `test.beforeEach`, asserted empty in a new
+  `test.afterEach`. This applies to every existing test in the file,
+  including "keyboard input starts the game, moves the player, and collects
+  a pellet" (already covers start -> move -> pellet pickup), so no new test
+  case was needed - only the pass/fail criterion for the existing ones
+  tightened. No test assertions were weakened or removed.
+- **No source fix was needed**: `npm run typecheck`, `npm run build`,
+  `npm test`, and `npm run test:e2e` all passed cleanly on the first run
+  after the `dist/`/`test-results/` wipe, and the new
+  pageerror/console-error check found zero errors across all 6 E2E tests.
+  Per the batch's own instructions, since nothing failed, no other source
+  file was touched.
+- **`docs/FINAL_REPORT.md`** was written as the "kort eindrapport" required
+  by `PROMPT_AND_ACCEPTANCE.md`: game description, how to run/play, a table
+  mapping each of the 7 Dutch acceptance criteria to implementing
+  files/functions and the tests proving them, this batch's verification
+  results, a one-line-per-batch build/repair history summary (pointing to
+  this file for detail), an explicit no-original-Pac-Man-assets and
+  no-external-generation-tool statement, and a known-limitations list.
+- **README.md**: added a "Documentation" section linking
+  `docs/FINAL_REPORT.md` and `docs/AUDIT_TRAIL.md`, and appended an explicit
+  "Complete and verified as of 2026-09-16" statement to the end of the
+  Status section (the existing "Implemented"/"Planned" content was left
+  intact, not rewritten).
+
+### What was built
+
+- `tests/e2e/smoke.spec.ts`: `beforeEach`/`afterEach` hooks asserting no
+  `pageerror` or console `error` event fired during any test.
+- `docs/FINAL_REPORT.md`: new file, the short final report.
+- `README.md`: new "Documentation" section plus a "Complete and verified"
+  line in Status.
+- `docs/AUDIT_TRAIL.md`: this entry.
+
+### Test results
+
+All run from a clean state (`dist/` and `test-results/` removed first):
+
+- `npm run typecheck` (`tsc --noEmit`): exited 0, no errors.
+- `npm run build` (`vite build`): exited 0.
+  ```
+  vite v5.4.21 building for production...
+  transforming...
+  ✓ 18 modules transformed.
+  rendering chunks...
+  computing gzip size...
+  dist/index.html                  0.40 kB │ gzip: 0.27 kB
+  dist/assets/index-34FdyVHZ.css   2.62 kB │ gzip: 1.01 kB
+  dist/assets/index-BKu-Wwpw.js   23.66 kB │ gzip: 8.66 kB
+  ✓ built in 264ms
+  ```
+- `npm test` (`vitest run`): exited 0 - **11 test files, 113 tests, all
+  passed** (unchanged from batch `08`, confirming no regression):
+  ```
+   ✓ tests/core/enemies.test.ts (18 tests) 14ms
+   ✓ tests/core/collisions.test.ts (19 tests) 11ms
+   ✓ tests/core/state.test.ts (13 tests) 16ms
+   ✓ tests/core/pathfinding.test.ts (13 tests) 17ms
+   ✓ tests/core/integration.test.ts (3 tests) 38ms
+   ✓ tests/core/progression.test.ts (11 tests) 22ms
+   ✓ tests/core/collectables.test.ts (9 tests) 6ms
+   ✓ tests/core/grid.test.ts (12 tests) 10ms
+   ✓ tests/core/player.test.ts (6 tests) 5ms
+   ✓ tests/core/loop.test.ts (6 tests) 5ms
+   ✓ tests/core/rng.test.ts (3 tests) 8ms
+
+   Test Files  11 passed (11)
+        Tests  113 passed (113)
+  ```
+- `npm run test:e2e` (`playwright test`, headless Chromium, run from a
+  clean `dist/`): exited 0 - **6 passed (5.3s)**, including the new
+  pageerror/console-error assertion on every test:
+  ```
+  Running 6 tests using 1 worker
+
+    ✓  1 [chromium] › tests/e2e/smoke.spec.ts:17:1 › shows a start overlay that is dismissed by starting the game (436ms)
+    ✓  2 [chromium] › tests/e2e/smoke.spec.ts:27:1 › renders the maze, canvas, and initial HUD (311ms)
+    ✓  3 [chromium] › tests/e2e/smoke.spec.ts:40:1 › keyboard input starts the game, moves the player, and collects a pellet (524ms)
+    ✓  4 [chromium] › tests/e2e/smoke.spec.ts:68:1 › restart resets score, lives, and game-over state (467ms)
+    ✓  5 [chromium] › tests/e2e/smoke.spec.ts:87:1 › HUD shows the current level number after starting (378ms)
+    ✓  6 [chromium] › tests/e2e/smoke.spec.ts:100:1 › mute button toggles its pressed state and label (370ms)
+
+    6 passed (5.3s)
+  ```
+- `git diff --stat -- src/core package.json package-lock.json`: empty,
+  confirming the core engine and dependencies are byte-identical to
+  batch `08`.
+- Final re-check before finishing, as required by this batch's
+  instructions: `npm run typecheck` (exit 0) and `npm test` (exit 0, 113/113
+  passed) were run once more after writing the documentation changes above,
+  confirming the documentation-only edits did not affect the engine or
+  break typechecking.
+
+### External generation prompts
+
+None used - no Lovable/Fable or other external generation was used for this
+batch; all changes were written directly.
+
 ## 2026-09-16 - Batch `08-level-progression-and-integration-test`
 
 ### Decisions

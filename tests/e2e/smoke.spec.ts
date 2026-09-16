@@ -1,5 +1,19 @@
 import { expect, test } from '@playwright/test';
 
+const pageErrors: string[] = [];
+
+test.beforeEach(({ page }) => {
+  pageErrors.length = 0;
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') pageErrors.push(msg.text());
+  });
+});
+
+test.afterEach(() => {
+  expect(pageErrors).toEqual([]);
+});
+
 test('shows a start overlay that is dismissed by starting the game', async ({ page }) => {
   await page.goto('/');
 

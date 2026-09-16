@@ -137,7 +137,17 @@ tests/
   e2e/         Playwright headless-browser smoke test.
 docs/
   AUDIT_TRAIL.md   Dated log of build/review/repair decisions.
+  FINAL_REPORT.md  Short final report: acceptance-criteria evidence table,
+                   final verification results, and build history summary.
 ```
+
+## Documentation
+
+- [`docs/FINAL_REPORT.md`](docs/FINAL_REPORT.md) — the short final report:
+  what the game is, how to run it, an acceptance-criteria-to-evidence table,
+  final verification results, and a build/repair history summary.
+- [`docs/AUDIT_TRAIL.md`](docs/AUDIT_TRAIL.md) — the full dated log of
+  build/review/repair decisions for every batch.
 
 ## Status
 
@@ -194,3 +204,10 @@ docs/
 
 - None outstanding from the original job goal; future batches would be
   additional levels/content rather than core mechanics or polish.
+
+**Complete and verified as of 2026-09-16**: all acceptance criteria are met,
+the full test suite (113 unit/integration tests + 6 headless-Chromium E2E
+tests) passes from a clean build, and the game is directly demonstrable in a
+desktop browser with no manual repair. See
+[`docs/FINAL_REPORT.md`](docs/FINAL_REPORT.md) for the full verification
+results and criteria-to-evidence table.
