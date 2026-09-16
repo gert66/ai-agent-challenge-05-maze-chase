@@ -20,6 +20,14 @@ export const ENEMY_NAMES = {
 
 export type EnemyKey = keyof typeof ENEMY_NAMES;
 
+/** Original per-Duskwisp colors, used to tell all four apart at a glance. */
+export const ENEMY_COLORS: Record<EnemyKey, string> = {
+  ember: '#ff6b4a',
+  frost: '#57e0ff',
+  marsh: '#8be36b',
+  dusk: '#c88bff',
+};
+
 export const COLORS = {
   background: '#0b1021',
   wall: '#2a3a8f',
@@ -30,6 +38,9 @@ export const COLORS = {
   player: '#ffd23f',
   den: '#1b2559',
   tunnel: '#0b1021',
+  /** Shared fill for every Duskwisp while Bloomburst empowerment is active. */
+  enemyFrightened: '#3347c9',
+  enemyEye: '#f4f7ff',
 } as const;
 
 export const TILE_SIZE_PX = 20;
@@ -44,7 +55,13 @@ export const POWER_PELLET_SCORE = 50;
  */
 export const BLOOMBURST_SCORE = 20;
 export const BLOOMBURST_DEFEAT_SCORE = 150;
-export const BLOOMBURST_DURATION_TICKS = 30;
+/**
+ * Counted down once per state.step() call. main.ts drives step() at a fixed
+ * timestep of STEP_MS = 1000 / 60 (60 ticks/sec), so 420 ticks is ~7 seconds
+ * of wall-clock frighten time. If the driving tick rate ever changes, this
+ * value should be re-tuned to keep the power-up perceptible.
+ */
+export const BLOOMBURST_DURATION_TICKS = 420;
 
 export const PLAYER_SPEED_TILES_PER_SEC = 6;
 export const ENEMY_SPEED_TILES_PER_SEC = 5;

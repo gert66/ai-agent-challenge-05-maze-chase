@@ -3,6 +3,130 @@
 Dated log of build/review/repair decisions for Glimmerdash. Newest entries
 first.
 
+## 2026-09-16 - Batch `04-game-loop-and-rendering`
+
+### Decisions
+
+- **Fixed-timestep accumulator as core logic, not inline in `main.ts`**: the
+  rAF loop needs to decouple the simulation tick rate from the (variable,
+  display-dependent) frame rate, and needs to cap ticks-per-frame so a
+  backgrounded tab doesn't cause a long "catch-up" burst on refocus. That
+  arithmetic is pure and non-trivial, so it lives in `src/core/loop.ts`
+  (`accumulateTicks`) with its own unit tests, rather than being written
+  untested inside `main.ts`. When capped, owed time beyond the cap is
+  discarded (not carried forward), so the simulation catches back up to
+  wall-clock time instead of permanently lagging behind it - `loop.test.ts`
+  exercises this case explicitly.
+- **Input wiring reuses the existing buffered-turn mechanism unchanged**:
+  `main.ts` tracks only "last movement key pressed" as `desiredDirection`
+  and passes it as `InputState.direction` into `state.step()` every tick,
+  exactly as the existing tests already exercise (see `state.test.ts`,
+  which calls `step(state, { direction: ... }, dtMs)` directly). The
+  buffering - holding a queued turn until it's legal at a tile centre -
+  is entirely `stepPlayer`'s existing behaviour (`src/core/player.ts`); no
+  movement/turning logic was duplicated in `main.ts`.
+- **Simulation tick rate**: `STEP_MS = 1000 / 60` (60 simulated ticks/sec),
+  independent of `requestAnimationFrame`'s actual rate. `MAX_TICKS_PER_FRAME
+  = 5` bounds the catch-up burst described above.
+- **Rendering is additive, `src/core/*` semantics are untouched**: `main.ts`
+  reads `GameState`/`Grid` fields already exposed by the core (player/enemy
+  `pos`/`direction`, `collectables.pellets`, `lives`, `gameOver`,
+  `levelComplete`, `empoweredTicksRemaining`) and renders them; it makes no
+  behavioural changes to any `src/core/*` module. `theme.ts` gained two
+  purely additive, non-logic exports - `ENEMY_COLORS` (one original color
+  per Duskwisp) and `COLORS.enemyFrightened`/`COLORS.enemyEye` - so the
+  renderer's colors stay centralized in the theme module per this batch's
+  instructions, instead of being hardcoded in `main.ts`.
+- **Enemy/player shapes are original, not Pac-Man-derived**: Duskwisps
+  render as a glowing orb with a small flame/wisp flicker on top and two
+  eyes that shift to face their current travel direction - deliberately not
+  the classic scalloped-skirt "ghost" silhouette. All four share this shape
+  but are individually colored (`ENEMY_COLORS`); while Bloomburst
+  empowerment is active, every Duskwisp switches to a single shared
+  `enemyFrightened` fill with darkened eyes, so frighten mode is legible at
+  a glance. Glim (the player) renders as a solid circle with a soft halo
+  that brightens while empowered.
+- **Overlays over restart mechanics**: a `Game Over` overlay (final score,
+  "Press Enter to try again") and a distinct `level-complete` overlay (final
+  score, "Press Enter to play again") are absolutely-positioned over the
+  canvas via CSS and toggled by `gameState.gameOver`/`gameState.levelComplete`.
+  Enter, while either is showing, calls `createInitialState` again (with an
+  incrementing run id as the new seed) to restart - reusing the existing
+  state-creation logic rather than hand-resetting individual fields.
+
+### What was built
+
+- `src/core/loop.ts`: `accumulateTicks`, a pure fixed-timestep accumulator
+  with tick-cap/spiral-of-death handling.
+- `tests/core/loop.test.ts`: 6 new unit tests for the accumulator (zero
+  delta, exact step, partial remainder, remainder carry-over, tick cap with
+  discard, negative delta clamping).
+- `src/core/theme.ts`: additive `ENEMY_COLORS` map and
+  `COLORS.enemyFrightened`/`COLORS.enemyEye` swatches for the renderer.
+- `src/main.ts`: replaced the static placeholder renderer with a real-time
+  game - `requestAnimationFrame` + `accumulateTicks` driving `state.step()`
+  unchanged, arrow-key/WASD keyboard input, full per-frame canvas rendering
+  (walls, den, pellets/power-pellets/Bloombursts, player, all four
+  Duskwisps with frighten-mode recoloring), a live score/lives HUD, and
+  game-over/level-complete overlays with an Enter-to-restart control.
+- `src/style.css`: HUD, controls-hint, stage/overlay layout and styling.
+- `README.md`: new "How to play" section (controls, scoring, power-up,
+  lose/win conditions) and an updated Status/project-structure section
+  reflecting the real game loop.
+
+### Test results
+
+- `npm run typecheck` (`tsc --noEmit`): exited 0, no errors.
+- `npm run build` (`vite build`): exited 0, produced `dist/`.
+- `npm test` (`vitest run`): exited 0 - **8 test files, 84 tests, all
+  passed** (78 pre-existing + 6 new in `loop.test.ts`). All pre-existing
+  `src/core/*` tests are unchanged and still pass, confirming core semantics
+  were not altered by this batch.
+- Manually started the Vite dev server (`npm run dev -- --port 5183
+  --strictPort`) and confirmed it served without startup errors; a
+  headless-browser (Playwright/Chromium) screenshot smoke check was not
+  possible in this environment (no browser automation tooling installed,
+  and this batch's scope disallows installing packages) - real
+  headless-browser E2E coverage is called out as a separate, later-batch
+  deliverable in the job goal.
+
+### External generation prompts
+
+None used - no external/Lovable/Fable generation was used for this batch;
+all code was written directly.
+
+### Repair 1 (2026-09-16)
+
+Review found that at `STEP_MS = 1000 / 60` (60 simulated ticks/sec), the
+pre-existing `BLOOMBURST_DURATION_TICKS = 30` (unchanged from batch
+`03-power-ups-and-frighten-mode`, where the tick rate was not yet fixed)
+produced only `30 * 16.67ms ≈ 0.5s` of wall-clock frighten time - about 3
+player tiles at 6 tiles/sec - making the Bloomburst power-up and the
+enemies' frightened recolor practically imperceptible in real play.
+
+- **Fix**: raised `BLOOMBURST_DURATION_TICKS` to `420` in `src/core/theme.ts`
+  (`420 / 60 ≈ 7s` of empowerment), with a comment tying the constant to
+  `state.step()` calls at `STEP_MS = 1000 / 60`. The tick rate itself
+  (`STEP_MS`, `MAX_TICKS_PER_FRAME`) was left unchanged - lowering it instead
+  would have made movement visibly jumpy since `main.ts` has no render
+  interpolation. Existing tests reference the constant symbolically
+  (`state.test.ts` loops `BLOOMBURST_DURATION_TICKS` times rather than
+  hard-coding `30`), so no test needed updating and no `src/core/*` file
+  other than `theme.ts` changed.
+- **Halo draw order**: `drawPlayer` in `src/main.ts` drew Glim's semi-
+  transparent halo *after* the solid body, so the halo visibly tinted the
+  body instead of sitting behind it as the comment claimed. Reordered so the
+  halo is drawn first, then the solid body on top.
+- **Bloomburst pulse**: README described the Bloomburst as "the pulsing
+  green orb," but the canvas render was a static circle and ring. Rather
+  than weaken the README, `drawCollectables` now takes the current
+  `requestAnimationFrame` timestamp and modulates the Bloomburst's fill
+  radius (5-7px) and ring alpha with a sine wave (~1s period), so the
+  rendering matches the README's description.
+
+No external/Lovable/Fable generation was used for this repair; all changes
+were written directly.
+
 ## 2026-09-16 - Batch `03-power-ups-and-frighten-mode`
 
 ### Decisions
