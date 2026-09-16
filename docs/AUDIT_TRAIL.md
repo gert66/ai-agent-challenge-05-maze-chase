@@ -3,6 +3,296 @@
 Dated log of build/review/repair decisions for Glimmerdash. Newest entries
 first.
 
+## 2026-09-16 - Batch `07-visual-audio-polish`
+
+### Decisions
+
+- **Presentation-only scope, `src/core/` untouched**: every change lives in
+  `src/main.ts`, three new `src/ui/*.ts` modules, `src/style.css`,
+  `tests/e2e/smoke.spec.ts`, and docs. Confirmed with
+  `git diff --stat -- src/core` returning empty before and after this
+  batch's work, so the deterministic engine and its 99 existing unit tests
+  are byte-identical.
+- **New `src/ui/` modules instead of growing `main.ts` further**:
+  `src/ui/audio.ts` (Web Audio synthesis + mute persistence),
+  `src/ui/effects.ts` (cosmetic particle/popup effect list), and
+  `src/ui/render.ts` (the render-interpolation helper) are small,
+  single-purpose, DOM-light modules with no GameState imports beyond
+  `Vec2`, matching the existing pattern of small core modules. `main.ts`
+  still owns all DOM construction, the game loop, and event diffing, so
+  there is exactly one place that reads `GameState`.
+- **Title kept as "Glimmerdash", not renamed to "The Hollow Garden"**: the
+  job description used "The Hollow Garden" only as an example of existing
+  theme naming to reuse; `Glimmerdash` was already the one consistent
+  title across `index.html`, `theme.ts`'s `GAME_TITLE`, and the README
+  since batch 01, so the start overlay and `document.title` reuse it
+  as-is rather than introducing a second, conflicting name. "The Hollow
+  Garden" remains the in-fiction location name, used in the start
+  overlay's premise line and the existing level-complete overlay text.
+- **Start gate is a boolean, not a new `GameState` field**: `let started =
+  false` in `main.ts` gates whether `frame()` calls `accumulateTicks`/
+  `step()` at all; when `false`, the loop still renders every frame (so the
+  start screen and idle sprite animation are visible) but never advances
+  simulated time, so `remainderMs` can't build up a burst of ticks while
+  the overlay is up. Chosen over a `GameState.started` field because
+  "has the run begun" is a presentation concern, not something `step()`,
+  collisions, or any test in `tests/core/` needs to know about.
+- **Enter dismisses the start overlay; the existing E2E movement test was
+  updated to press Enter first** (one of the two documented options in the
+  batch instructions) rather than also dismissing on the first arrow key,
+  since Enter-to-start reads unambiguously as an intentional action versus
+  a movement key that could be pressed to explore controls without meaning
+  to start.
+- **Render interpolation via a pure helper, not stored on `GameState`**:
+  `src/ui/render.ts`'s `interpolatePos(prev, curr, alpha, gridWidth)` takes
+  two tile-space `Vec2`s and lerps between them by the accumulator's
+  leftover fraction (`remainderMs / STEP_MS`). `main.ts` keeps a
+  `previousRenderState` module variable, reassigned to the pre-step
+  `GameState` only when a tick actually fires (so it correctly holds its
+  value across frames where zero ticks ran, letting `alpha` climb smoothly
+  toward 1 between ticks). Two teleport cases are explicitly excluded from
+  interpolation and snapped to the current position instead: a tunnel wrap
+  (`|dx| > gridWidth / 2`) and any other jump bigger than one tile in a
+  single step (`|dx| > 1 || |dy| > 1`, e.g. a life-lost respawn back to
+  spawn) - both would otherwise render as a streak sweeping across the
+  maze. Enemies are matched between `prev`/`curr` by `EnemyState.id`
+  (stable across the whole run), not array index, defensively - even
+  though `createEnemies` always returns the same four ids in the same
+  order today.
+- **Events are derived by diffing states in `main.ts`, never fed back into
+  `state`**: `handleTransition(prev, curr, nowMs)` runs once per tick
+  (inside the same loop that calls `step()`), comparing `lives`,
+  `enemies[].inDen` transitions (used instead of raw score deltas to
+  detect enemy defeats, since it stays correct even if several Duskwisps
+  are defeated in the same tick), `empoweredTicksRemaining` transitioning
+  from `0`, and `collectables.score` deltas with the already-explained
+  defeat/empowerment portion subtracted out to isolate a plain
+  pellet/power-pellet pickup. It only calls into `src/ui/effects.ts`
+  (`spawnRing`/`spawnBurst`/`spawnPopup`, which push into a private,
+  module-local array) and `src/ui/audio.ts`'s `play*` functions, and reads
+  `GameState` fields without writing any of them - so cosmetic effects
+  cannot influence the deterministic simulation.
+- **Screen shake / red flash / HUD score bump via CSS animations, not
+  canvas drawing**: `stage.shake` and `flashOverlay.flash-active` are
+  plain keyframe animations retriggered by removing the class, forcing a
+  reflow (`void el.offsetWidth`), then re-adding it, so rapid repeats (e.g.
+  losing two lives close together) restart visibly instead of being
+  no-ops. This was simpler and more robust than hand-rolling the same
+  effect as time-based canvas transforms, and keeps `src/ui/effects.ts`
+  focused on effects that need to be drawn in tile-space on the canvas
+  (rings/bursts/popups).
+- **Frighten-flash threshold reuses the existing `BLOOMBURST_DURATION_TICKS`
+  constant** (`theme.ts`, untouched): `FRIGHTEN_WARNING_TICKS =
+  BLOOMBURST_DURATION_TICKS * 0.25` in `main.ts`, so Duskwisps start
+  flashing between their frightened and normal colors during the last
+  quarter of empowerment without introducing a second, possibly
+  inconsistent constant in the core theme module.
+- **Audio: lazy `AudioContext`, graceful failure, six original synthesized
+  cues**: `src/ui/audio.ts`'s `unlockAudio()` is only ever called from
+  inside a user-gesture handler (the Start button click, the first
+  keydown, or the mute button click) and is a no-op on repeat calls beyond
+  resuming a suspended context. Every `play*` function and `unlockAudio`
+  itself is wrapped in `try/catch` and silently no-ops if `AudioContext`
+  construction or scheduling throws, so the game runs identically in
+  environments without Web Audio. All six cues (`playPickup`,
+  `playPowerUp`, `playDefeat`, `playLifeLost`, `playLevelComplete`,
+  `playGameOver`) are built purely from `OscillatorNode`/`GainNode`
+  envelopes (square/sawtooth/triangle waves, short attack/decay) - no audio
+  files, no recognizable melody. Mute state persists to `localStorage`
+  under `glimmerdash.muted` (read/write both wrapped in `try/catch` for
+  storage-disabled contexts) and is exposed via the `M` key and the
+  on-screen `data-testid="mute-button"` button, which also sets
+  `aria-pressed` and swaps its label.
+- **`tests/e2e/smoke.spec.ts` restructured, not just patched**: added a new
+  first test asserting the start overlay is visible on load and hidden
+  after clicking `data-testid="start-button"`; the existing movement test
+  now clicks the body, presses `Enter` (asserting the overlay becomes
+  hidden), then proceeds exactly as before; the restart test also presses
+  `Enter` before its `ArrowUp`; a new final test clicks
+  `data-testid="mute-button"` and asserts `aria-pressed` and its text
+  label both change, then change back on a second click. No test was
+  removed or weakened.
+
+### What was built
+
+- `src/ui/render.ts`: `interpolatePos` - the pure tile-space lerp/snap
+  helper described above.
+- `src/ui/effects.ts`: `spawnRing`, `spawnBurst`, `spawnPopup`,
+  `clearEffects` (called on restart), and `drawEffects` (canvas draw +
+  expiry sweep), backing a private module-local effect list.
+- `src/ui/audio.ts`: `unlockAudio`, `isMuted`/`setMuted`/`toggleMuted`
+  (localStorage-backed), and six `play*` synthesized sound effects.
+- `src/main.ts`: start overlay + Start button + "Press Enter to begin"
+  gating simulation start; a `previousRenderState`-tracking game loop that
+  calls `interpolatePos` for the player and every enemy each render;
+  direction-aware player mouth animation and per-enemy idle
+  bob/sway/frighten-flash in `drawPlayer`/`drawEnemy`; `handleTransition`
+  wiring state diffs to `src/ui/effects.ts`/`src/ui/audio.ts`; an
+  empowered-timer HUD bar, lives icons (alongside the existing `Lives: N`
+  text), and the mute button/`M`-key handler.
+- `src/style.css`: header layout, HUD score-bump keyframes, lives-icon and
+  empowered-bar styling, mute-button styling, start-overlay/start-button
+  styling, and the shake/flash keyframes.
+- `tests/e2e/smoke.spec.ts`: rewritten/extended to 5 tests as described
+  above (was 3).
+- `README.md`: "How to play" reworked into a controls table plus the M-mute
+  control, a new "Polish & feedback" section, updated "Testing"/"Project
+  structure"/"Status" sections.
+
+### Test results
+
+- `npm run typecheck` (`tsc --noEmit`): exited 0, no errors.
+- `npm run build` (`vite build`): exited 0.
+  ```
+  vite v5.4.21 building for production...
+  transforming...
+  ✓ 18 modules transformed.
+  rendering chunks...
+  computing gzip size...
+  dist/index.html                  0.40 kB │ gzip: 0.27 kB
+  dist/assets/index-34FdyVHZ.css   2.62 kB │ gzip: 1.01 kB
+  dist/assets/index-Be2-6nu0.js   22.49 kB │ gzip: 8.26 kB
+  ✓ built in 269ms
+  ```
+- `npm test` (`vitest run`): exited 0 - **9 test files, 99 tests, all
+  passed** (unchanged from batch `06`, confirming `src/core/*` semantics
+  are untouched):
+  ```
+   ✓ tests/core/enemies.test.ts (18 tests) 15ms
+   ✓ tests/core/collisions.test.ts (19 tests) 10ms
+   ✓ tests/core/state.test.ts (13 tests) 16ms
+   ✓ tests/core/pathfinding.test.ts (13 tests) 11ms
+   ✓ tests/core/collectables.test.ts (9 tests) 6ms
+   ✓ tests/core/grid.test.ts (12 tests) 12ms
+   ✓ tests/core/player.test.ts (6 tests) 6ms
+   ✓ tests/core/loop.test.ts (6 tests) 4ms
+   ✓ tests/core/rng.test.ts (3 tests) 8ms
+
+   Test Files  9 passed (9)
+        Tests  99 passed (99)
+  ```
+- `git diff --stat -- src/core`: empty output, confirming no core-engine
+  file changed.
+- `npm run test:e2e` (`playwright test`): exited 0 - **5 passed (4.9s)**:
+  ```
+  Running 5 tests using 1 worker
+
+    ✓  1 [chromium] › tests/e2e/smoke.spec.ts:3:1 › shows a start overlay that is dismissed by starting the game (444ms)
+    ✓  2 [chromium] › tests/e2e/smoke.spec.ts:13:1 › renders the maze, canvas, and initial HUD (318ms)
+    ✓  3 [chromium] › tests/e2e/smoke.spec.ts:26:1 › keyboard input starts the game, moves the player, and collects a pellet (531ms)
+    ✓  4 [chromium] › tests/e2e/smoke.spec.ts:54:1 › restart resets score, lives, and game-over state (476ms)
+    ✓  5 [chromium] › tests/e2e/smoke.spec.ts:73:1 › mute button toggles its pressed state and label (383ms)
+
+    5 passed (4.9s)
+  ```
+
+### External generation prompts
+
+None used - no external/Lovable/Fable generation was used for this batch;
+all code (sprite animation, cosmetic effects, synthesized audio, start
+screen, HUD polish) was written directly by hand, not generated by an
+external design/prototyping tool.
+
+### Repair 1 (2026-09-16)
+
+Independent review found a real defect in `handleTransition()`'s event
+diffing: enemy defeats were detected purely from an enemy's `inDen`
+transitioning `false -> true`. `resolveCollisions()`
+(`src/core/collisions.ts`) resets `inDen` to `true` on *every* enemy - not
+just a defeated one - when the player loses a life, so each life loss was
+misread as N simultaneous enemy defeats: every enemy that had been out of
+its den got a spurious `+150` popup and particle burst, and `playDefeat()`
+fired alongside `playLifeLost()`.
+
+- **Fix**: `handleTransition()` now derives `defeatCount` from the score
+  delta instead of trusting `inDen` alone. When `curr.lives < prev.lives`
+  (a life was lost), defeat detection is skipped entirely for that tick -
+  a life loss and an enemy defeat are mutually exclusive within one
+  `state.step()` call. Otherwise, `defeatCount = Math.floor((scoreDelta -
+  (justEmpowered ? BLOOMBURST_SCORE : 0)) / BLOOMBURST_DEFEAT_SCORE)`, which
+  correctly isolates defeats even when a plain pellet or the Bloomburst
+  itself is picked up in the same tick (their scores are far smaller than
+  `BLOOMBURST_DEFEAT_SCORE = 150`, so they land in the `floor` remainder,
+  not the defeat count). The `inDen` `false -> true` transition is still
+  used, but only to choose *which* enemies get a popup/burst, capped at
+  `defeatCount` - it is no longer the sole signal for *whether* a defeat
+  happened. A comment in `src/main.ts` explains why `inDen` alone is
+  insufficient.
+- **`renderLivesIcons()` DOM churn (MINOR)**: it was called from `render()`
+  every animation frame and rebuilt `livesIconsEl.innerHTML` every time,
+  even though the lives count changes only on life loss/restart. Added a
+  module-level `lastRenderedLives` cache (reset to `-1` in `resetGame()`)
+  so the icon DOM is only rebuilt when the lives count actually changes.
+- **`drawPlayer()` mutating `lastFacing` (MINOR)**: render functions should
+  be read-only. Moved the `lastFacing` update out of `drawPlayer()` and
+  into the tick loop in `frame()`, right after `state.step()` returns each
+  tick, so `drawPlayer()` now only reads `lastFacing`.
+- **Audit count (INFO)**: corrected "two new `src/ui/*.ts` modules" to
+  "three new `src/ui/*.ts` modules" in this entry's first Decisions bullet
+  (`audio.ts`, `effects.ts`, `render.ts`).
+
+Verification after the fix - real command output:
+
+```
+$ npm run typecheck
+> glimmerdash@0.1.0 typecheck
+> tsc --noEmit
+
+$ npm run build
+> glimmerdash@0.1.0 build
+> vite build
+
+vite v5.4.21 building for production...
+transforming...
+✓ 18 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                  0.40 kB │ gzip: 0.27 kB
+dist/assets/index-34FdyVHZ.css   2.62 kB │ gzip: 1.01 kB
+dist/assets/index-D_OjEnGq.js   22.60 kB │ gzip: 8.32 kB
+✓ built in 264ms
+
+$ npm test
+> glimmerdash@0.1.0 test
+> vitest run
+
+ RUN  v2.1.9 /home/myngle/Myngle/Mingo/AI-Agent-Challenge/repos/ai-agent-challenge-05-maze-chase
+
+ ✓ tests/core/enemies.test.ts (18 tests) 20ms
+ ✓ tests/core/collisions.test.ts (19 tests) 8ms
+ ✓ tests/core/state.test.ts (13 tests) 20ms
+ ✓ tests/core/pathfinding.test.ts (13 tests) 9ms
+ ✓ tests/core/collectables.test.ts (9 tests) 7ms
+ ✓ tests/core/grid.test.ts (12 tests) 10ms
+ ✓ tests/core/player.test.ts (6 tests) 7ms
+ ✓ tests/core/loop.test.ts (6 tests) 5ms
+ ✓ tests/core/rng.test.ts (3 tests) 8ms
+
+ Test Files  9 passed (9)
+      Tests  99 passed (99)
+
+$ npm run test:e2e
+> glimmerdash@0.1.0 test:e2e
+> playwright test
+
+Running 5 tests using 1 worker
+
+  ✓  1 [chromium] › tests/e2e/smoke.spec.ts:3:1 › shows a start overlay that is dismissed by starting the game (428ms)
+  ✓  2 [chromium] › tests/e2e/smoke.spec.ts:13:1 › renders the maze, canvas, and initial HUD (299ms)
+  ✓  3 [chromium] › tests/e2e/smoke.spec.ts:26:1 › keyboard input starts the game, moves the player, and collects a pellet (535ms)
+  ✓  4 [chromium] › tests/e2e/smoke.spec.ts:54:1 › restart resets score, lives, and game-over state (476ms)
+  ✓  5 [chromium] › tests/e2e/smoke.spec.ts:73:1 › mute button toggles its pressed state and label (356ms)
+
+  5 passed (4.8s)
+```
+
+`git diff --stat HEAD -- src/core` and `git diff --stat HEAD -- package.json`
+were both empty before and after this repair - the deterministic engine and
+dependencies are unchanged.
+
+No external/Lovable/Fable generation was used for this repair; all changes
+were written directly by hand.
+
 ## 2026-09-16 - Batch `06-real-pathfinding-for-enemies`
 
 ### Decisions

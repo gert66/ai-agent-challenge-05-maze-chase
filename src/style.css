@@ -5,16 +5,25 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  background: #05060f;
+  gap: 10px;
+  background: radial-gradient(ellipse at center, #101736 0%, #05060f 70%);
   color: #e6e8ff;
   font-family: system-ui, sans-serif;
+}
+
+.game-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
 }
 
 canvas {
   image-rendering: pixelated;
   border: 2px solid #2a3a8f;
+  border-radius: 4px;
   display: block;
+  box-shadow: 0 0 24px rgba(42, 58, 143, 0.5);
 }
 
 .tagline {
@@ -25,10 +34,88 @@ canvas {
 
 .hud {
   display: flex;
-  gap: 24px;
+  align-items: center;
+  gap: 20px;
   font-size: 1.1rem;
   font-weight: 600;
   letter-spacing: 0.02em;
+}
+
+.hud-score {
+  display: inline-block;
+  transform-origin: center;
+}
+
+.hud-score.bump {
+  animation: hud-bump 220ms ease;
+}
+
+@keyframes hud-bump {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.35);
+    color: #ffe066;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.lives-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lives-icons {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.life-icon {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ffd23f;
+  box-shadow: 0 0 4px rgba(255, 210, 63, 0.8);
+  display: inline-block;
+}
+
+.mute-button {
+  margin-left: auto;
+  background: #1b2559;
+  color: #e6e8ff;
+  border: 1px solid #2a3a8f;
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.mute-button:hover {
+  background: #2a3a8f;
+}
+
+.empowered-bar-wrap {
+  width: 300px;
+  max-width: 90vw;
+  height: 6px;
+  background: #1b2559;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.empowered-bar-wrap.hidden {
+  visibility: hidden;
+}
+
+.empowered-bar-fill {
+  height: 100%;
+  background: #7cff9b;
+  width: 100%;
+  transition: width 80ms linear;
 }
 
 .controls-hint {
@@ -39,6 +126,50 @@ canvas {
 
 .stage {
   position: relative;
+}
+
+.stage.shake {
+  animation: stage-shake 260ms ease-in-out;
+}
+
+@keyframes stage-shake {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  20% {
+    transform: translate(-4px, 2px);
+  }
+  40% {
+    transform: translate(4px, -2px);
+  }
+  60% {
+    transform: translate(-3px, 1px);
+  }
+  80% {
+    transform: translate(3px, -1px);
+  }
+}
+
+.flash-overlay {
+  position: absolute;
+  inset: 0;
+  background: #ff3b3b;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.flash-overlay.flash-active {
+  animation: flash-fade 260ms ease-out;
+}
+
+@keyframes flash-fade {
+  0% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 0;
+  }
 }
 
 .overlay {
@@ -70,6 +201,26 @@ canvas {
 .overlay .hint {
   color: #9aa3d6;
   font-size: 0.9rem;
+}
+
+.overlay-start h2 {
+  color: #ffd23f;
+}
+
+.start-button {
+  margin-top: 8px;
+  background: #ffd23f;
+  color: #0b1021;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 20px;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.start-button:hover {
+  background: #ffe066;
 }
 
 .overlay-game-over h2 {
