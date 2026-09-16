@@ -70,6 +70,19 @@ test('restart resets score, lives, and game-over state', async ({ page }) => {
   expect(state.gameOver).toBe(false);
 });
 
+test('HUD shows the current level number after starting', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForFunction(() => window.__mazeChase !== undefined);
+
+  await page.locator('body').click();
+  await page.keyboard.press('Enter');
+  await expect(page.getByTestId('overlay-start')).toBeHidden();
+
+  await expect(page.getByTestId('hud-level')).toHaveText('Level 1');
+  const state = await page.evaluate(() => window.__mazeChase.getState());
+  expect(state.levelNumber).toBe(1);
+});
+
 test('mute button toggles its pressed state and label', async ({ page }) => {
   await page.goto('/');
 

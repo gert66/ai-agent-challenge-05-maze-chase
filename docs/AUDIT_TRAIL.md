@@ -3,6 +3,137 @@
 Dated log of build/review/repair decisions for Glimmerdash. Newest entries
 first.
 
+## 2026-09-16 - Batch `08-level-progression-and-integration-test`
+
+### Decisions
+
+- **`levelNumber` and `advanceLevel()` live in `src/core/state.ts`, not a
+  new module**: level progression is a thin extension of the existing
+  `GameState`/`createInitialState`/`step` trio - a 1-based `levelNumber`
+  field, and a pure `advanceLevel(state)` that only runs once
+  `state.levelComplete` is true (throws otherwise, matching the "no-op or
+  throw" choice required by the batch - throwing was chosen because calling
+  it before completion is a caller bug, not a valid game state to silently
+  ignore). It builds the next level via the existing `createInitialState`
+  and then splices in the carried-over `lives` and `collectables.score`, so
+  every other reset (pellets, player, enemies, empowerment) is guaranteed to
+  match a brand-new level exactly - there is no separate reset code path to
+  drift out of sync with `createInitialState`.
+- **Deterministic difficulty ramp is a pure function of `levelNumber`
+  alone**: `enemySpeedMultiplier(levelNumber)` and
+  `bloomburstDurationTicks(levelNumber)` (both exported from `state.ts`) are
+  plain arithmetic, no RNG involved, matching the job goal's
+  "deterministic/testable core logic" requirement. Enemy speed ramps +6%
+  per level above 1, capped at 1.6x (reached at level 11); Bloomburst
+  duration shrinks 5% per level above 1, floored at 40% of the base duration
+  (reached at level 13). Both floors/caps mean the ramp saturates instead of
+  degenerating to zero speed or an unbounded frighten timer at very high
+  levels. At `levelNumber === 1` both multipliers are exactly `1`, so this
+  batch changes zero observable behaviour for existing level-1 gameplay or
+  tests.
+- **`LEVELS` has one map, so "next level" cycles it**: `advanceLevel` computes
+  `nextLevelIndex = (state.levelIndex + 1) % LEVELS.length`, which is always
+  `0` today; the modulo is there so a future batch can add a second map
+  without touching this function.
+- **Test-only `freezeEnemies` flag added as an explicit `GameState` field and
+  `createInitialState` parameter**, exactly as the batch instructions
+  required for any enemy-disabling test hook: when `true`, `step()` skips
+  `stepEnemy` entirely and leaves `state.enemies` untouched (they stay put in
+  the den). This lets `tests/core/integration.test.ts` script a full,
+  deterministic level clear via real `step()` calls without its outcome
+  depending on enemy escape timing or a hand-picked "safe" seed - collision
+  and respawn behaviour is already covered by `state.test.ts` and
+  `collisions.test.ts`, so this integration test's job is to prove pellet
+  collection and level completion end-to-end, not to re-prove collisions.
+  The flag defaults to `false` for every existing call site (including all
+  pre-existing tests and `main.ts`), so real gameplay is unaffected.
+- **Integration test walks a real BFS path, one tile per `step()` call**:
+  `tests/core/integration.test.ts` repeatedly finds the first remaining
+  pellet in row-major order via `findPath` (`src/core/pathfinding.ts`) from
+  the player's current tile, then issues one `step()` call per tile in that
+  path with `dtMs = 1000 / PLAYER_SPEED_TILES_PER_SEC` (the exact time to
+  cross one tile at the player's fixed speed - the same relationship the
+  pre-existing `state.test.ts` movement tests already rely on), so the
+  simulated playthrough is indistinguishable from real keyboard-driven
+  movement. It re-scans for the next target after each full path walk
+  (not after every tile) so any pellets incidentally collected en route are
+  picked up for free, matching real play.
+- **`main.ts` gets a HUD level indicator and a level-complete "continue"
+  flow, no core logic added**: a new `data-testid="hud-level"` span shows
+  `Level N`; the level-complete overlay's title/hint update to name the next
+  level and a `data-testid="next-level-button"` button appears; Enter now
+  branches on `gameOver` (restart, unchanged) vs. `levelComplete` (calls the
+  new `advanceToNextLevel()`, which just calls `core`'s `advanceLevel()` and
+  resets the same presentation-only variables `resetGame()` already resets -
+  `previousRenderState`, `desiredDirection`, `lastFacing`,
+  `lastRenderedLives`, `remainderMs`, and the effects list). The existing
+  level-complete sound cue still fires exactly once, from the pre-existing
+  `handleTransition()` diff (`curr.levelComplete && !prev.levelComplete`),
+  since that transition happens during normal `step()` ticking before the
+  player ever presses Enter/clicks the button - `advanceToNextLevel()` does
+  not need to (and does not) trigger any additional audio.
+- **Manual browser verification used a throwaway debug hook, not a shipped
+  one**: to confirm the Enter/button-driven level-complete-to-level-2 flow
+  actually works in a real headless browser (forcing a full level clear
+  purely to test UI wiring would have taken an impractically long scripted
+  playthrough), a temporary `window.__mazeChase.__debugForceLevelComplete()`
+  method and a throwaway Playwright spec were added, run, and then both were
+  fully removed before finishing this batch - `git diff` after this batch
+  shows no trace of either. The temporary spec confirmed: the level-complete
+  overlay shows "Level 1 Clear!" with the Next Level button, lives are
+  preserved, Enter advances to `levelNumber: 2` with `levelComplete: false`
+  and the HUD updates to "Level 2", the Next Level button does the same, and
+  a game-over restart still resets to level 1 with score 0.
+
+### What was built
+
+- `src/core/types.ts`: `GameState.levelNumber` (1-based) and
+  `GameState.freezeEnemies` (test-only, documented in a doc comment).
+- `src/core/state.ts`: `enemySpeedMultiplier()`, `bloomburstDurationTicks()`,
+  and `advanceLevel()`, all exported; `createInitialState()` gained
+  `levelNumber` and `freezeEnemies` parameters (both optional, defaulting to
+  today's behaviour); `step()` now skips enemy movement when frozen and uses
+  the ramped Bloomburst duration instead of the flat constant.
+- `tests/core/progression.test.ts` (11 tests): `advanceLevel` throwing before
+  completion, `levelNumber` incrementing, score/lives carrying over,
+  collectables/player/enemies/empowerment resetting, the ramp being strictly
+  harder at level 2 than level 1, the ramp's floor/cap saturating at a very
+  high level, and same-input determinism.
+- `tests/core/integration.test.ts` (3 tests): a full deterministic Hollow
+  Garden clear via scripted `step()` calls with the exact expected score,
+  continuing into level 2 via `advanceLevel()` and collecting a pellet
+  there, and same-seed determinism across a full replay (including the
+  level-2 continuation).
+- `src/main.ts`: `hud-level` HUD span, level-complete overlay next-level
+  button/copy, `advanceToNextLevel()`, and the Enter-key branch update.
+- `tests/e2e/smoke.spec.ts`: one new test asserting `hud-level` reads
+  "Level 1" after starting.
+- `README.md`: level-progression coverage in the feature list, how-to-play,
+  and testing sections.
+
+### Test results
+
+- `npm run typecheck` (`tsc --noEmit`): exited 0, no errors.
+- `npm test` (`vitest run`): exited 0 - **11 test files, 113 tests, all
+  passed** (102 pre-existing + 11 new `progression.test.ts` + re-counted;
+  net new files: `progression.test.ts` 11 tests, `integration.test.ts` 3
+  tests).
+- `npm run build` (`vite build`): exited 0, produced `dist/` (`index.html`,
+  one CSS asset, one JS asset).
+- `npx playwright test` (Chromium, already installed): exited 0 - **6
+  tests, all passed**, including the new "HUD shows the current level
+  number after starting" test.
+- Manual browser-flow verification (temporary debug hook + throwaway spec,
+  removed afterward - see Decisions above): 3/3 passed, confirming the
+  level-complete overlay, Next Level button, Enter-to-continue, HUD level
+  update, and game-over-restarts-at-level-1 behaviour all work in a real
+  headless Chromium browser, not just in unit tests.
+
+### External generation prompts
+
+None used - no Lovable/Fable or other external generation was used for this
+batch; all code was written directly.
+
 ## 2026-09-16 - Batch `07-visual-audio-polish`
 
 ### Decisions

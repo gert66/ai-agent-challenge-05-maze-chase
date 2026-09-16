@@ -52,6 +52,8 @@ export interface EnemyState {
 
 export interface GameState {
   levelIndex: number;
+  /** 1-based level counter, carried and incremented across advanceLevel() calls. */
+  levelNumber: number;
   seed: number;
   /** Evolving seed for the tick-by-tick PRNG stream (enemy tie-breaking, wander). */
   rngSeed: number;
@@ -64,6 +66,13 @@ export interface GameState {
   gameOver: boolean;
   /** Game steps left with the Bloomburst empowerment active; 0 when not empowered. */
   empoweredTicksRemaining: number;
+  /**
+   * Test-only debug flag: when true, step() never moves enemies (they stay
+   * put) and so never collides with the player. Lets integration tests
+   * script a deterministic full level clear without depending on enemy
+   * escape timing or a specific seed's collision outcome.
+   */
+  freezeEnemies: boolean;
 }
 
 export interface InputState {

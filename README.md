@@ -40,7 +40,7 @@ pellet, and Bloomburst while avoiding the four Duskwisps.
 | Control | Action |
 | --- | --- |
 | Arrow keys / WASD | Move (turns are buffered — press a direction slightly before a junction and Glim turns as soon as it's legal) |
-| Enter | Start the game from the title screen; restart after game over or level complete |
+| Enter | Start the game from the title screen; restart after game over; continue to the next level after clearing one |
 | M | Toggle sound on/off (also available as the on-screen Mute button) |
 
 - **Start**: on load, a title screen shows the premise and controls. Press
@@ -60,9 +60,15 @@ pellet, and Bloomburst while avoiding the four Duskwisps.
   Duskwisps to their spawns.
 - **Game over**: losing all three lives ends the run; a **Game Over**
   overlay shows the final score. Press **Enter** to restart.
-- **Win**: collecting every pellet, power pellet, and Bloomburst clears the
-  level; a **level-complete** overlay shows the final score. Press **Enter**
-  to play again.
+- **Win a level**: collecting every pellet, power pellet, and Bloomburst
+  clears the level; a **level-complete** overlay shows the level's score so
+  far and the current level number, shown live in the HUD (`Level N`).
+  Press **Enter** or click **Next Level** to continue — score and remaining
+  lives carry over into the next level, which cycles back through The Hollow
+  Garden with every Duskwisp faster and the Bloomburst empowerment shorter
+  than the level before (see the difficulty ramp formulas in
+  `src/core/state.ts`, floored/capped so neither ever becomes trivial or
+  unfair).
 
 ## Polish & feedback
 
@@ -93,15 +99,20 @@ pellet, and Bloomburst while avoiding the four Duskwisps.
 
 - **Unit/integration tests** (`npm test`): Vitest specs in `tests/core/`
   covering the deterministic game engine (grid, player, enemies,
-  collisions, collectables, power-ups, and the loop accumulator). No
-  browser required.
+  collisions, collectables, power-ups, level progression, and the loop
+  accumulator), plus `tests/core/integration.test.ts`, which drives the real
+  Hollow Garden level through `step()` with a scripted BFS-pathed playthrough
+  (via `src/core/pathfinding.ts`) to fully clear it, checks the exact
+  expected score, advances to level 2 with `advanceLevel()`, and verifies
+  same-seed determinism. No browser required.
 - **End-to-end smoke test** (`npm run test:e2e`): a headless-Chromium
   Playwright test in `tests/e2e/smoke.spec.ts` that builds the app, serves
   it, and drives a real browser to confirm: the start overlay is visible on
   load and is dismissed by the Start button/Enter, the canvas renders, the
-  HUD shows the initial score/lives, keyboard input starts the game and
-  actually moves the player and collects a pellet, `restart()` resets
-  state, and the mute button toggles its `aria-pressed` state and label.
+  HUD shows the initial score/lives/level (`Level 1`), keyboard input starts
+  the game and actually moves the player and collects a pellet, `restart()`
+  resets state, and the mute button toggles its `aria-pressed` state and
+  label.
   One-time setup before the first run: `npx playwright install chromium`
   (downloads the browser binary; it is not committed to the repo).
 - **Everything** (`npm run test:all`): runs the unit suite, then the E2E
@@ -139,6 +150,14 @@ docs/
   ambush/wander behaviours, collisions, a Bloomburst power-up with a timed
   frighten mode, pellet/power-pellet/Bloomburst collection, scoring, lives,
   game-over, and level-complete detection (`src/core/`).
+- Level progression (`src/core/state.ts`): a 1-based `levelNumber` on
+  `GameState` and a pure `advanceLevel()` that, once a level is cleared,
+  carries score and lives forward into a freshly reset next level (pellets,
+  player, enemies, and empowerment all reset; cycling back through `LEVELS`
+  when there are fewer maps than the next level number) with a deterministic
+  difficulty ramp - enemy speed and Bloomburst duration are pure functions of
+  `levelNumber` alone, each floored/capped so the ramp never reaches zero or
+  an unfairly extreme multiplier.
 - Real navigation, not just heuristic steering: `src/core/pathfinding.ts`
   runs a deterministic breadth-first search over the maze (respecting walls,
   the horizontal tunnel wrap, and den restrictions) to find true

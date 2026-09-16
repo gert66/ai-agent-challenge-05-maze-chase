@@ -3,7 +3,7 @@ import type { Grid } from './core/grid';
 import { parseLevel } from './core/grid';
 import { LEVELS } from './core/levels';
 import { accumulateTicks } from './core/loop';
-import { createInitialState, step } from './core/state';
+import { advanceLevel, createInitialState, step } from './core/state';
 import {
   BLOOMBURST_DEFEAT_SCORE,
   BLOOMBURST_DURATION_TICKS,
@@ -54,6 +54,9 @@ hud.className = 'hud';
 const scoreEl = document.createElement('span');
 scoreEl.className = 'hud-score';
 scoreEl.setAttribute('data-testid', 'hud-score');
+const levelEl = document.createElement('span');
+levelEl.className = 'hud-level';
+levelEl.setAttribute('data-testid', 'hud-level');
 const livesEl = document.createElement('span');
 livesEl.setAttribute('data-testid', 'hud-lives');
 const livesIconsEl = document.createElement('span');
@@ -68,7 +71,7 @@ muteButton.type = 'button';
 muteButton.className = 'mute-button';
 muteButton.setAttribute('data-testid', 'mute-button');
 
-hud.append(scoreEl, livesWrap, muteButton);
+hud.append(scoreEl, levelEl, livesWrap, muteButton);
 
 const empoweredBarWrap = document.createElement('div');
 empoweredBarWrap.className = 'empowered-bar-wrap hidden';
@@ -79,7 +82,7 @@ empoweredBarWrap.append(empoweredBarFill);
 
 const controlsHint = document.createElement('p');
 controlsHint.className = 'controls-hint';
-controlsHint.textContent = 'Arrows/WASD move · Enter restart · M mute';
+controlsHint.textContent = 'Arrows/WASD move · Enter restart/continue · M mute';
 
 const LEVEL_INDEX = 0;
 const grid = parseLevel(LEVELS[LEVEL_INDEX].rows);
@@ -130,12 +133,15 @@ const levelCompleteOverlay = document.createElement('div');
 levelCompleteOverlay.className = 'overlay overlay-level-complete hidden';
 levelCompleteOverlay.setAttribute('data-testid', 'overlay-level-complete');
 const levelCompleteTitle = document.createElement('h2');
-levelCompleteTitle.textContent = 'The Hollow Garden is Clear!';
 const levelCompleteScore = document.createElement('p');
+const nextLevelButton = document.createElement('button');
+nextLevelButton.type = 'button';
+nextLevelButton.className = 'start-button';
+nextLevelButton.textContent = 'Next Level';
+nextLevelButton.setAttribute('data-testid', 'next-level-button');
 const levelCompleteHint = document.createElement('p');
 levelCompleteHint.className = 'hint';
-levelCompleteHint.textContent = 'Press Enter to play again';
-levelCompleteOverlay.append(levelCompleteTitle, levelCompleteScore, levelCompleteHint);
+levelCompleteOverlay.append(levelCompleteTitle, levelCompleteScore, nextLevelButton, levelCompleteHint);
 
 stage.append(canvas, flashOverlay, startOverlay, gameOverOverlay, levelCompleteOverlay);
 app.append(header, hud, empoweredBarWrap, stage, controlsHint);
@@ -231,6 +237,18 @@ function beginGame(): void {
   lastFrameTime = null;
 }
 
+/** Continues play into the next level, preserving score/lives via core's advanceLevel(). */
+function advanceToNextLevel(): void {
+  if (!state.levelComplete) return;
+  state = advanceLevel(state);
+  previousRenderState = state;
+  desiredDirection = 'none';
+  lastFacing = 'right';
+  lastRenderedLives = -1;
+  remainderMs = 0;
+  clearEffects();
+}
+
 declare global {
   interface Window {
     __mazeChase: {
@@ -264,6 +282,11 @@ startButton.addEventListener('click', () => {
   beginGame();
 });
 
+nextLevelButton.addEventListener('click', () => {
+  unlockAudio();
+  advanceToNextLevel();
+});
+
 window.addEventListener('keydown', (event) => {
   const direction = KEY_DIRECTIONS[event.key];
   if (direction) {
@@ -283,8 +306,10 @@ window.addEventListener('keydown', (event) => {
       beginGame();
       return;
     }
-    if (state.gameOver || state.levelComplete) {
+    if (state.gameOver) {
       resetGame();
+    } else if (state.levelComplete) {
+      advanceToNextLevel();
     }
   }
 });
@@ -535,6 +560,7 @@ function render(gameState: GameState, prevState: GameState, alpha: number, nowMs
   drawEffects(ctx!, TILE_SIZE_PX, nowMs);
 
   scoreEl.textContent = `Score: ${gameState.collectables.score}`;
+  levelEl.textContent = `Level ${gameState.levelNumber}`;
   livesEl.textContent = `Lives: ${gameState.lives}`;
   renderLivesIcons(gameState.lives);
   renderEmpoweredBar(gameState.empoweredTicksRemaining);
@@ -546,7 +572,9 @@ function render(gameState: GameState, prevState: GameState, alpha: number, nowMs
 
   levelCompleteOverlay.classList.toggle('hidden', !gameState.levelComplete);
   if (gameState.levelComplete) {
-    levelCompleteScore.textContent = `Final score: ${gameState.collectables.score}`;
+    levelCompleteTitle.textContent = `Level ${gameState.levelNumber} Clear!`;
+    levelCompleteScore.textContent = `Score so far: ${gameState.collectables.score}`;
+    levelCompleteHint.textContent = `Press Enter or click Next Level for Level ${gameState.levelNumber + 1}`;
   }
 }
 
