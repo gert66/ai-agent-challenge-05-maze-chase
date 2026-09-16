@@ -10,7 +10,33 @@ export interface Grid {
   playerSpawn: TilePos;
   /** Anchor tile inside the enemy den, used as the default enemy spawn point. */
   denSpawn: TilePos;
+  /** Every den tile ('G'), in row-major scan order. */
+  denTiles: TilePos[];
+  /** The single den tile that borders open (non-den, non-wall) floor. */
+  denDoor: TilePos;
   tunnelRows: number[];
+}
+
+/** Finds the one den tile that borders non-den, non-wall floor - the exit. */
+function findDenDoor(tiles: TileType[][], denTiles: TilePos[], width: number, height: number): TilePos {
+  const deltas: TilePos[] = [
+    { col: 0, row: -1 },
+    { col: 0, row: 1 },
+    { col: -1, row: 0 },
+    { col: 1, row: 0 },
+  ];
+  for (const tile of denTiles) {
+    for (const d of deltas) {
+      const row = tile.row + d.row;
+      if (row < 0 || row >= height) continue;
+      let col = tile.col + d.col;
+      if (col < 0) col = width - 1;
+      if (col >= width) col = 0;
+      const neighbourType = tiles[row][col];
+      if (neighbourType !== 'wall' && neighbourType !== 'den') return tile;
+    }
+  }
+  throw new Error('Den has no door tile bordering open floor');
 }
 
 const LEGEND: Record<string, TileType> = {
@@ -60,6 +86,8 @@ export function parseLevel(rows: string[]): Grid {
     tiles,
     playerSpawn,
     denSpawn: denTiles[Math.floor(denTiles.length / 2)],
+    denTiles,
+    denDoor: findDenDoor(tiles, denTiles, width, height),
     tunnelRows: [...tunnelRows].sort((a, b) => a - b),
   };
 }

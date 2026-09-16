@@ -3,6 +3,75 @@
 Dated log of build/review/repair decisions for Glimmerdash. Newest entries
 first.
 
+## 2026-09-16 - Batch `02-enemy-ai-and-collisions`
+
+### Decisions
+
+- **Behaviour-to-name mapping**: the four Duskwisps named in batch 01
+  (Ember, Frost, Marsh, Dusk) each get one distinct, deterministic movement
+  behaviour: **Ember** does a direct greedy chase toward the player's tile;
+  **Frost** patrols a fixed four-corner scatter circuit; **Marsh** ambushes
+  a tile ahead of the player's current facing; **Dusk** wanders, picking
+  uniformly among legal moves. All four are pure functions of grid state
+  plus the seeded PRNG - no Pac-Man ghost names, no `Math.random`.
+- **Movement model**: enemies reuse the tile-centre-stepping approach from
+  `player.ts` (travel in a straight line between tile centres, only
+  re-evaluate direction on landing exactly on one) rather than a shared
+  helper, to keep this batch's diff scoped to new files plus small,
+  additive edits to `types.ts`/`grid.ts`/`theme.ts`/`state.ts`.
+- **Tie-breaking**: whenever two or more legal directions are equally good
+  for a behaviour's target, the choice is made via `Math.floor(rng() *
+  options.length)` against the shared seeded PRNG (`rng.ts`), so identical
+  seeds always reproduce identical enemy paths.
+- **Den/door**: `grid.ts` now also exposes `denTiles` (every `'G'` tile) and
+  `denDoor` (the one den tile bordering non-den, non-wall floor, found by
+  scanning each den tile's neighbours). Enemies spawn on `denTiles` and path
+  toward `denDoor` while `inDen`, flipping to their normal behaviour once
+  they land on a tile that isn't a den tile.
+- **Collisions**: `collisions.ts` checks player/enemy tile overlap each
+  tick; any overlap costs one life and resets the player and every enemy to
+  their spawn tiles (enemies re-enter the den). Power-ups/frightened mode
+  are explicitly out of scope for this batch. `state.step` now short-circuits
+  once `gameOver` is true, mirroring the existing `levelComplete` guard.
+- **PRNG state as plain data**: `GameState` gained `rngSeed` (separate from
+  the level `seed`) so the PRNG stream survives across ticks without storing
+  a non-serializable closure - each tick reconstructs `mulberry32(rngSeed)`,
+  draws whatever the enemies need, then derives the next tick's seed from
+  one more draw.
+
+### What was built
+
+- `src/core/enemies.ts`: `createEnemies`, `stepEnemy`, and the underlying
+  behaviour functions (`chooseDirectionTowards`, `chooseWanderDirection`,
+  `scatterCorners`, `ambushTargetTile`, `computeEnemyTarget`).
+- `src/core/collisions.ts`: `resolveCollisions` (lives decrement + spawn
+  reset + game-over flag).
+- `src/core/types.ts`: added `EnemyBehaviourId`, `EnemyState`, and extended
+  `GameState` with `enemies`, `lives`, `gameOver`, `rngSeed`.
+- `src/core/grid.ts`: added `denTiles`/`denDoor` to `Grid`.
+- `src/core/theme.ts`: added `ENEMY_SPEED_TILES_PER_SEC`.
+- `src/core/state.ts`: wired enemy stepping and collision resolution into
+  `step`.
+- `tests/core/enemies.test.ts`, `tests/core/collisions.test.ts`, plus
+  additions to `tests/core/state.test.ts` (24 new tests: three distinct
+  behaviours on a small fixed maze fixture, PRNG-seeded tie-breaking,
+  den-to-door exit, and collision resolution including the zero-lives case).
+- `src/main.ts` was not touched - it doesn't import `state.ts`, so the new
+  `GameState` fields didn't require any rendering-layer changes.
+
+### Test results
+
+- `npm run typecheck` (`tsc --noEmit`): exited 0, no errors.
+- `npm run build` (`vite build`): exited 0, produced `dist/`.
+- `npm test` (`vitest run`): exited 0 - **7 test files, 54 tests, all
+  passed** (30 pre-existing + 24 new: `enemies.test.ts` 16,
+  `collisions.test.ts` 5, `state.test.ts` +3).
+
+### External generation prompts
+
+None used - no Lovable/Fable or other external generation was used for this
+batch; all code was written directly.
+
 ## 2026-09-16 - Batch `01-scaffold-core-engine`
 
 ### Decisions

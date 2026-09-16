@@ -13,6 +13,14 @@ describe('createInitialState', () => {
     expect(state.levelComplete).toBe(false);
     expect(state.elapsedMs).toBe(0);
   });
+
+  it('spawns four Duskwisps in the den with three lives and no game over', () => {
+    const state = createInitialState(0, 42);
+    expect(state.enemies).toHaveLength(4);
+    expect(state.enemies.every((enemy) => enemy.inDen)).toBe(true);
+    expect(state.lives).toBe(3);
+    expect(state.gameOver).toBe(false);
+  });
 });
 
 describe('step', () => {
@@ -46,5 +54,41 @@ describe('step', () => {
     // Moving left from spawn collects the one remaining pellet.
     const next = step(almostDone, { direction: 'left' }, 1000);
     expect(next.levelComplete).toBe(true);
+  });
+
+  it('resolves a player-enemy collision each tick: loses a life and resets both to their spawns', () => {
+    const state = createInitialState(0, 42);
+    const grid = parseLevel(LEVELS[0].rows);
+    // Put one Duskwisp directly on the player's tile, out of the den, so this
+    // tick's collision check (dt=0, no movement) detects the overlap.
+    const withCollision = {
+      ...state,
+      enemies: state.enemies.map((enemy, index) =>
+        index === 0 ? { ...enemy, pos: { ...state.player.pos }, inDen: false } : enemy,
+      ),
+    };
+
+    const next = step(withCollision, { direction: 'none' }, 0);
+
+    expect(next.lives).toBe(2);
+    expect(next.gameOver).toBe(false);
+    expect(next.player.pos).toEqual({ x: grid.playerSpawn.col, y: grid.playerSpawn.row });
+    expect(next.enemies[0].inDen).toBe(true);
+  });
+
+  it('ends the game once the last life is lost to a collision', () => {
+    const state = createInitialState(0, 42);
+    const withOneLifeAndCollision = {
+      ...state,
+      lives: 1,
+      enemies: state.enemies.map((enemy, index) =>
+        index === 0 ? { ...enemy, pos: { ...state.player.pos }, inDen: false } : enemy,
+      ),
+    };
+
+    const next = step(withOneLifeAndCollision, { direction: 'none' }, 0);
+
+    expect(next.lives).toBe(0);
+    expect(next.gameOver).toBe(true);
   });
 });

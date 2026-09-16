@@ -37,3 +37,4 @@ export const PELLET_SCORE = 10;
 export const POWER_PELLET_SCORE = 50;
 
 export const PLAYER_SPEED_TILES_PER_SEC = 6;
+export const ENEMY_SPEED_TILES_PER_SEC = 5;
