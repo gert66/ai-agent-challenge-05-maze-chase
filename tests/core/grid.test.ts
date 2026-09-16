@@ -56,7 +56,7 @@ describe('horizontal tunnel wrap', () => {
 });
 
 describe('connectivity', () => {
-  it('reaches every non-wall tile (including every pellet) from the player spawn', () => {
+  it('reaches every non-wall tile (including every pellet and Bloomburst) from the player spawn', () => {
     const reached = reachableTiles(grid, grid.playerSpawn);
 
     let totalWalkable = 0;
@@ -70,7 +70,7 @@ describe('connectivity', () => {
         totalWalkable++;
         const isReached = reached.has(`${col},${row}`);
         if (isReached) reachedWalkable++;
-        if (tile === 'pellet' || tile === 'power-pellet') {
+        if (tile === 'pellet' || tile === 'power-pellet' || tile === 'bloomburst') {
           totalPellets++;
           if (isReached) reachedPellets++;
         }
@@ -80,5 +80,22 @@ describe('connectivity', () => {
     expect(totalPellets).toBeGreaterThan(0);
     expect(reachedPellets).toBe(totalPellets);
     expect(reachedWalkable).toBe(totalWalkable);
+  });
+
+  it('reaches every Bloomburst tile specifically from the player spawn', () => {
+    const reached = reachableTiles(grid, grid.playerSpawn);
+
+    let totalBloombursts = 0;
+    let reachedBloombursts = 0;
+    for (let row = 0; row < grid.height; row++) {
+      for (let col = 0; col < grid.width; col++) {
+        if (grid.tiles[row][col] !== 'bloomburst') continue;
+        totalBloombursts++;
+        if (reached.has(`${col},${row}`)) reachedBloombursts++;
+      }
+    }
+
+    expect(totalBloombursts).toBe(4);
+    expect(reachedBloombursts).toBe(totalBloombursts);
   });
 });

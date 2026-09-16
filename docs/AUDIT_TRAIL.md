@@ -3,6 +3,85 @@
 Dated log of build/review/repair decisions for Glimmerdash. Newest entries
 first.
 
+## 2026-09-16 - Batch `03-power-ups-and-frighten-mode`
+
+### Decisions
+
+- **Naming**: the power-up is called a **Bloomburst** (tile character `B`,
+  `TileType` value `'bloomburst'`) - an original name distinct from
+  "power pellet"/"energizer", consistent with the existing Hollow
+  Garden/Duskwisp theme. It is a new, separate collectable from the
+  pre-existing `'power-pellet'` (`*`) tile, which keeps its old
+  score-only behaviour unchanged; `main.ts` was intentionally left
+  untouched for this batch, so introducing a brand-new `TileType` (rather
+  than repurposing `'power-pellet'`) avoids breaking its existing
+  `tile === 'power-pellet'` render check.
+- **Placement**: four Bloomburst tiles replace the outermost pellet on the
+  level's two horizontal symmetry rows (just inside the corners, next to
+  the existing power pellets), preserving the maze's left-right symmetry
+  and its walkability - only the *collectable kind* on those tiles changed,
+  not the wall layout, so connectivity is trivially preserved and is also
+  re-verified by a dedicated BFS reachability test.
+- **Determinism**: empowerment is tracked as `GameState.empoweredTicksRemaining`,
+  a plain integer decremented by exactly one per `step()` call (a "game
+  step", independent of `dtMs`/wall-clock time), not a millisecond timer.
+  Collecting a Bloomburst resets it to the fixed `BLOOMBURST_DURATION_TICKS`
+  constant (`theme.ts`). This keeps the mechanic fully deterministic and
+  testable by driving `step()` a known number of times.
+- **Collision resolution**: `resolveCollisions` gained two optional
+  parameters, `empowered` (default `false`) and `denDoor`, so existing
+  callers/tests are unaffected. When not empowered, behaviour is byte-for-byte
+  identical to batch 02 (life lost, player and every enemy reset). When
+  empowered, only the enemy/enemies actually sharing the player's tile are
+  affected: each is sent to `denDoor` (deterministic, not `enemySpawns`
+  cycling) and marked `inDen`, the player keeps its position and lives, and
+  `bonusScore` (`BLOOMBURST_DEFEAT_SCORE` per enemy defeated) is added to the
+  score in `state.ts`. All four Duskwisp behaviours (Ember/chase,
+  Frost/scatter, Marsh/ambush, Dusk/wander) go through the same tile-overlap
+  check, so each is exercised explicitly in `collisions.test.ts` for both the
+  empowered and normal paths. No `Math.random` was introduced anywhere;
+  the only tie-breaking (which enemy's collision to report first when
+  several would qualify) is unnecessary here since every colliding enemy is
+  handled, not just one.
+
+### What was built
+
+- `src/core/theme.ts`: `BLOOMBURST_SCORE`, `BLOOMBURST_DEFEAT_SCORE`,
+  `BLOOMBURST_DURATION_TICKS`, and a `COLORS.bloomburst` swatch for a future
+  rendering batch.
+- `src/core/grid.ts`: new `'bloomburst'` `TileType` and `'B'` legend entry.
+- `src/core/levels.ts`: four `'B'` tiles added to the Hollow Garden layout
+  (legend comment updated to match).
+- `src/core/types.ts`: `CollectablesState.bloomburstRemaining` and
+  `GameState.empoweredTicksRemaining`.
+- `src/core/collectables.ts`: Bloomburst counting/collection in
+  `createCollectablesState`/`collectAt`, and `isLevelComplete` now also
+  requires `bloomburstRemaining === 0`.
+- `src/core/collisions.ts`: empowered-mode branch in `resolveCollisions`
+  (per-enemy defeat + bonus score instead of a shared life loss/reset).
+- `src/core/state.ts`: wires empowerment into `step()` - tracks
+  `empoweredTicksRemaining`, passes the empowered flag and `grid.denDoor`
+  into `resolveCollisions`, and folds `bonusScore` into the collectables
+  score.
+- 24 new Vitest tests across `tests/core/collectables.test.ts`,
+  `tests/core/collisions.test.ts` (including one case per Duskwisp
+  behaviour, empowered and normal), `tests/core/grid.test.ts` (Bloomburst
+  reachability), and `tests/core/state.test.ts` (collection, countdown,
+  expiry, and both collision outcomes end-to-end through `step()`).
+- `src/main.ts` was not touched, per this batch's scope.
+
+### Test results
+
+- `npm run typecheck` (`tsc --noEmit`): exited 0, no errors.
+- `npm run build` (`vite build`): exited 0, produced `dist/`.
+- `npm test` (`vitest run`): exited 0 - **7 test files, 78 tests, all
+  passed** (54 pre-existing + 24 new).
+
+### External generation prompts
+
+None used - no external/Lovable/Fable generation was used for this batch;
+all code was written directly.
+
 ## 2026-09-16 - Batch `02-enemy-ai-and-collisions`
 
 ### Decisions

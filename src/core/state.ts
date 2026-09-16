@@ -5,6 +5,7 @@ import { type Grid, parseLevel } from './grid';
 import { LEVELS } from './levels';
 import { createPlayerState, stepPlayer } from './player';
 import { mulberry32 } from './rng';
+import { BLOOMBURST_DURATION_TICKS } from './theme';
 import type { GameState, InputState } from './types';
 
 const START_LIVES = 3;
@@ -35,8 +36,7 @@ export function createInitialState(levelIndex: number, seed: number): GameState 
     elapsedMs: 0,
     levelComplete: false,
     gameOver: false,
-    // TODO(power-ups): start/tick a power-up timer here once power pellets do
-    // more than add score.
+    empoweredTicksRemaining: 0,
   };
 }
 
@@ -59,9 +59,28 @@ export function step(state: GameState, input: InputState, dtMs: number): GameSta
   );
   const rngSeed = Math.floor(rng() * 0xffffffff) >>> 0;
 
-  const { state: collectables } = collectAt(grid, state.collectables, playerTile);
+  const { state: collectedState, collected } = collectAt(grid, state.collectables, playerTile);
+  const justEmpowered = collected === 'bloomburst';
+  const empowered = state.empoweredTicksRemaining > 0 || justEmpowered;
 
-  const collision = resolveCollisions(movedPlayer, movedEnemies, state.lives, grid.playerSpawn, grid.denTiles);
+  const collision = resolveCollisions(
+    movedPlayer,
+    movedEnemies,
+    state.lives,
+    grid.playerSpawn,
+    grid.denTiles,
+    empowered,
+    grid.denDoor,
+  );
+
+  const collectables =
+    collision.bonusScore > 0
+      ? { ...collectedState, score: collectedState.score + collision.bonusScore }
+      : collectedState;
+
+  const empoweredTicksRemaining = justEmpowered
+    ? BLOOMBURST_DURATION_TICKS
+    : Math.max(0, state.empoweredTicksRemaining - 1);
 
   return {
     ...state,
@@ -73,5 +92,6 @@ export function step(state: GameState, input: InputState, dtMs: number): GameSta
     rngSeed,
     elapsedMs: state.elapsedMs + dtMs,
     levelComplete: isLevelComplete(collectables),
+    empoweredTicksRemaining,
   };
 }

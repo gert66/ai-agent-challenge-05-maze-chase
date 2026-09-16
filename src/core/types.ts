@@ -21,11 +21,12 @@ export interface PlayerState {
 }
 
 export interface CollectablesState {
-  /** Remaining pellets/power-pellets by [row][col]. */
+  /** Remaining pellets/power-pellets/Bloombursts by [row][col]. */
   pellets: boolean[][];
   score: number;
   pelletsRemaining: number;
   powerPelletsRemaining: number;
+  bloomburstRemaining: number;
 }
 
 /**
@@ -61,7 +62,8 @@ export interface GameState {
   elapsedMs: number;
   levelComplete: boolean;
   gameOver: boolean;
-  // TODO(power-ups): add active power-up timer state once power-ups are implemented.
+  /** Game steps left with the Bloomburst empowerment active; 0 when not empowered. */
+  empoweredTicksRemaining: number;
 }
 
 export interface InputState {

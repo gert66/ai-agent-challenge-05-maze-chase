@@ -5,6 +5,8 @@
  *   #  wall
  *   o  pellet (floor tile with a collectable pellet)
  *   *  power pellet (floor tile with a temporary power-up pellet)
+ *   B  Bloomburst (floor tile with the empowerment power-up: while it lasts,
+ *      touching a Duskwisp defeats it for bonus score instead of costing a life)
  *   P  player spawn (plain floor once parsed)
  *   G  Duskwisp den - enemy pen/spawn area (walkable floor)
  *   T  tunnel edge - wraps horizontally to the opposite edge of the same row
@@ -26,7 +28,7 @@ const floor = (n: number): string => 'o'.repeat(n);
 const HOLLOW_GARDEN_ROWS: string[] = [
   wall(23),
   '#' + floor(21) + '#',
-  '#' + 'o' + '*' + floor(17) + '*' + 'o' + '#',
+  '#' + 'B' + '*' + floor(17) + '*' + 'B' + '#',
   '#' + floor(2) + wall(3) + floor(4) + wall(3) + floor(4) + wall(3) + floor(2) + '#',
   '#' + floor(2) + wall(3) + floor(4) + wall(3) + floor(4) + wall(3) + floor(2) + '#',
   '#' + floor(2) + wall(3) + floor(11) + wall(3) + floor(2) + '#',
@@ -48,7 +50,7 @@ const HOLLOW_GARDEN_ROWS: string[] = [
   '#' + floor(21) + '#',
   '#' + floor(5) + wall(3) + floor(5) + wall(3) + floor(5) + '#',
   '#' + floor(5) + wall(3) + floor(5) + wall(3) + floor(5) + '#',
-  '#' + 'o' + '*' + floor(8) + 'P' + floor(8) + '*' + 'o' + '#',
+  '#' + 'B' + '*' + floor(8) + 'P' + floor(8) + '*' + 'B' + '#',
   '#' + floor(21) + '#',
   wall(23),
 ];

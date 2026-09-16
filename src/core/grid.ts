@@ -1,6 +1,6 @@
 import type { TilePos, Vec2 } from './types';
 
-export type TileType = 'wall' | 'floor' | 'pellet' | 'power-pellet' | 'tunnel' | 'den';
+export type TileType = 'wall' | 'floor' | 'pellet' | 'power-pellet' | 'bloomburst' | 'tunnel' | 'den';
 
 export interface Grid {
   width: number;
@@ -43,6 +43,7 @@ const LEGEND: Record<string, TileType> = {
   '#': 'wall',
   o: 'pellet',
   '*': 'power-pellet',
+  B: 'bloomburst',
   '.': 'floor',
   P: 'floor',
   G: 'den',

@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { parseLevel } from '../../src/core/grid';
 import { LEVELS } from '../../src/core/levels';
 import { createInitialState, step } from '../../src/core/state';
-import { PELLET_SCORE } from '../../src/core/collectables';
+import { PELLET_SCORE, BLOOMBURST_SCORE } from '../../src/core/collectables';
+import { BLOOMBURST_DEFEAT_SCORE, BLOOMBURST_DURATION_TICKS } from '../../src/core/theme';
 
 describe('createInitialState', () => {
   it('places the player at the spawn tile with a full pellet count and no score', () => {
@@ -20,6 +21,11 @@ describe('createInitialState', () => {
     expect(state.enemies.every((enemy) => enemy.inDen)).toBe(true);
     expect(state.lives).toBe(3);
     expect(state.gameOver).toBe(false);
+  });
+
+  it('starts with no active Bloomburst empowerment', () => {
+    const state = createInitialState(0, 42);
+    expect(state.empoweredTicksRemaining).toBe(0);
   });
 });
 
@@ -49,7 +55,12 @@ describe('step', () => {
     const state = createInitialState(0, 1);
     const almostDone = {
       ...state,
-      collectables: { ...state.collectables, pelletsRemaining: 1, powerPelletsRemaining: 0 },
+      collectables: {
+        ...state.collectables,
+        pelletsRemaining: 1,
+        powerPelletsRemaining: 0,
+        bloomburstRemaining: 0,
+      },
     };
     // Moving left from spawn collects the one remaining pellet.
     const next = step(almostDone, { direction: 'left' }, 1000);
@@ -90,5 +101,80 @@ describe('step', () => {
 
     expect(next.lives).toBe(0);
     expect(next.gameOver).toBe(true);
+  });
+
+  it('enters the empowered state for a fixed duration after collecting a Bloomburst', () => {
+    const state = createInitialState(0, 1);
+    // (1, 24) holds a Bloomburst on the player's spawn row; start three
+    // tiles east of it so 500ms (3 tiles at speed 6) lands exactly on it.
+    const nearBloomburst = {
+      ...state,
+      player: { ...state.player, pos: { x: 4, y: 24 }, direction: 'left' as const },
+    };
+
+    const next = step(nearBloomburst, { direction: 'left' }, 500);
+
+    expect(next.player.pos).toEqual({ x: 1, y: 24 });
+    expect(next.collectables.score).toBe(BLOOMBURST_SCORE);
+    expect(next.empoweredTicksRemaining).toBe(BLOOMBURST_DURATION_TICKS);
+  });
+
+  it('counts the empowered duration down by exactly one game step per tick', () => {
+    const state = createInitialState(0, 1);
+    const empowered = { ...state, empoweredTicksRemaining: BLOOMBURST_DURATION_TICKS };
+
+    const next = step(empowered, { direction: 'none' }, 0);
+
+    expect(next.empoweredTicksRemaining).toBe(BLOOMBURST_DURATION_TICKS - 1);
+  });
+
+  it('expires the empowered state after exactly BLOOMBURST_DURATION_TICKS ticks and never goes negative', () => {
+    const state = createInitialState(0, 1);
+    let current = { ...state, empoweredTicksRemaining: BLOOMBURST_DURATION_TICKS };
+
+    for (let i = 0; i < BLOOMBURST_DURATION_TICKS; i++) {
+      current = step(current, { direction: 'none' }, 0);
+    }
+    expect(current.empoweredTicksRemaining).toBe(0);
+
+    const oneMoreTick = step(current, { direction: 'none' }, 0);
+    expect(oneMoreTick.empoweredTicksRemaining).toBe(0);
+  });
+
+  it('resolves a collision while empowered as a defeat: bonus score, no life lost, enemy sent to the den door', () => {
+    const state = createInitialState(0, 42);
+    const grid = parseLevel(LEVELS[0].rows);
+    const empoweredWithCollision = {
+      ...state,
+      empoweredTicksRemaining: BLOOMBURST_DURATION_TICKS,
+      enemies: state.enemies.map((enemy, index) =>
+        index === 0 ? { ...enemy, pos: { ...state.player.pos }, inDen: false } : enemy,
+      ),
+    };
+
+    const next = step(empoweredWithCollision, { direction: 'none' }, 0);
+
+    expect(next.lives).toBe(3);
+    expect(next.gameOver).toBe(false);
+    expect(next.collectables.score).toBe(BLOOMBURST_DEFEAT_SCORE);
+    expect(next.player.pos).toEqual(state.player.pos);
+    expect(next.enemies[0].pos).toEqual({ x: grid.denDoor.col, y: grid.denDoor.row });
+    expect(next.enemies[0].inDen).toBe(true);
+  });
+
+  it('reverts to normal collision handling (life lost) once the empowered duration has expired', () => {
+    const state = createInitialState(0, 42);
+    const expiredWithCollision = {
+      ...state,
+      empoweredTicksRemaining: 0,
+      enemies: state.enemies.map((enemy, index) =>
+        index === 0 ? { ...enemy, pos: { ...state.player.pos }, inDen: false } : enemy,
+      ),
+    };
+
+    const next = step(expiredWithCollision, { direction: 'none' }, 0);
+
+    expect(next.lives).toBe(2);
+    expect(next.collectables.score).toBe(0);
   });
 });

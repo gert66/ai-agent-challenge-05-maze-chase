@@ -26,6 +26,7 @@ export const COLORS = {
   floor: '#0b1021',
   pellet: '#ffe066',
   powerPellet: '#ff6b6b',
+  bloomburst: '#7CFF9B',
   player: '#ffd23f',
   den: '#1b2559',
   tunnel: '#0b1021',
@@ -35,6 +36,15 @@ export const TILE_SIZE_PX = 20;
 
 export const PELLET_SCORE = 10;
 export const POWER_PELLET_SCORE = 50;
+
+/**
+ * A Bloomburst is the maze's original time-limited power-up: collecting one
+ * grants the player a fixed number of game steps during which touching a
+ * Duskwisp defeats it (for bonus score) instead of costing a life.
+ */
+export const BLOOMBURST_SCORE = 20;
+export const BLOOMBURST_DEFEAT_SCORE = 150;
+export const BLOOMBURST_DURATION_TICKS = 30;
 
 export const PLAYER_SPEED_TILES_PER_SEC = 6;
 export const ENEMY_SPEED_TILES_PER_SEC = 5;
