@@ -29,7 +29,9 @@ tagline.className = 'tagline';
 const hud = document.createElement('div');
 hud.className = 'hud';
 const scoreEl = document.createElement('span');
+scoreEl.setAttribute('data-testid', 'hud-score');
 const livesEl = document.createElement('span');
+livesEl.setAttribute('data-testid', 'hud-lives');
 hud.append(scoreEl, livesEl);
 
 const controlsHint = document.createElement('p');
@@ -45,9 +47,11 @@ stage.className = 'stage';
 const canvas = document.createElement('canvas');
 canvas.width = grid.width * TILE_SIZE_PX;
 canvas.height = grid.height * TILE_SIZE_PX;
+canvas.setAttribute('data-testid', 'game-canvas');
 
 const gameOverOverlay = document.createElement('div');
 gameOverOverlay.className = 'overlay overlay-game-over hidden';
+gameOverOverlay.setAttribute('data-testid', 'overlay-game-over');
 const gameOverTitle = document.createElement('h2');
 gameOverTitle.textContent = 'Game Over';
 const gameOverScore = document.createElement('p');
@@ -58,6 +62,7 @@ gameOverOverlay.append(gameOverTitle, gameOverScore, gameOverHint);
 
 const levelCompleteOverlay = document.createElement('div');
 levelCompleteOverlay.className = 'overlay overlay-level-complete hidden';
+levelCompleteOverlay.setAttribute('data-testid', 'overlay-level-complete');
 const levelCompleteTitle = document.createElement('h2');
 levelCompleteTitle.textContent = 'The Hollow Garden is Clear!';
 const levelCompleteScore = document.createElement('p');
@@ -111,13 +116,32 @@ let state: GameState = createInitialState(LEVEL_INDEX, runId);
 let desiredDirection: Direction = 'none';
 let remainderMs = 0;
 let lastFrameTime: number | null = null;
+/** Count of `state.step()` calls so far this run; exposed for E2E/debug use only. */
+let tick = 0;
 
 function resetGame(): void {
   runId += 1;
   state = createInitialState(LEVEL_INDEX, runId);
   desiredDirection = 'none';
   remainderMs = 0;
+  tick = 0;
 }
+
+declare global {
+  interface Window {
+    __mazeChase: {
+      getState(): GameState;
+      getTick(): number;
+      restart(): void;
+    };
+  }
+}
+
+window.__mazeChase = {
+  getState: () => state,
+  getTick: () => tick,
+  restart: () => resetGame(),
+};
 
 window.addEventListener('keydown', (event) => {
   const direction = KEY_DIRECTIONS[event.key];
@@ -275,6 +299,7 @@ function frame(time: number): void {
 
   for (let i = 0; i < accumulated.ticks; i++) {
     state = step(state, { direction: desiredDirection }, STEP_MS);
+    tick += 1;
   }
 
   render(state, time);

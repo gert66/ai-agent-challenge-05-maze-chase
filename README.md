@@ -27,6 +27,8 @@ Then open the printed local URL in a desktop browser.
 | `npm run build` | Type-check and produce an optimized production build in `dist/` |
 | `npm run preview` | Serve the production build locally |
 | `npm test` | Run the Vitest unit/integration test suite |
+| `npm run test:e2e` | Run the headless-Chromium Playwright E2E smoke test |
+| `npm run test:all` | Run the unit suite, then the E2E suite |
 | `npm run typecheck` | Run `tsc --noEmit` across `src/` and `tests/` |
 
 ## How to play
@@ -50,6 +52,22 @@ pellet, and Bloomburst while avoiding the four Duskwisps.
   level; a **level-complete** overlay shows the final score. Press **Enter**
   to play again.
 
+## Testing
+
+- **Unit/integration tests** (`npm test`): Vitest specs in `tests/core/`
+  covering the deterministic game engine (grid, player, enemies,
+  collisions, collectables, power-ups, and the loop accumulator). No
+  browser required.
+- **End-to-end smoke test** (`npm run test:e2e`): a headless-Chromium
+  Playwright test in `tests/e2e/smoke.spec.ts` that builds the app, serves
+  it, and drives a real browser to confirm the canvas renders, the HUD
+  shows the initial score/lives, keyboard input actually moves the player
+  and collects a pellet, and `restart()` resets state. One-time setup
+  before the first run: `npx playwright install chromium` (downloads the
+  browser binary; it is not committed to the repo).
+- **Everything** (`npm run test:all`): runs the unit suite, then the E2E
+  suite.
+
 ## Project structure
 
 ```
@@ -62,6 +80,7 @@ src/
   style.css    Page, HUD, and overlay styling.
 tests/
   core/        Vitest specs for the core engine.
+  e2e/         Playwright headless-browser smoke test.
 docs/
   AUDIT_TRAIL.md   Dated log of build/review/repair decisions.
 ```
@@ -90,8 +109,11 @@ docs/
 - Unit test suite covering connectivity, wall blocking, buffered turning,
   tunnel wrap, enemy behaviours, collisions, power-ups, scoring, level
   completion, PRNG determinism, and the loop accumulator.
+- A headless-Chromium Playwright E2E smoke test (`tests/e2e/smoke.spec.ts`)
+  covering initial render/HUD, keyboard-driven movement and pellet
+  collection, and restart, driven through a `window.__mazeChase` debug
+  hook exposed by `src/main.ts`.
 
 **Planned (later batches)**
 
 - Sprite art, animations, and audio feedback polish.
-- End-to-end headless-browser smoke test.

@@ -3,6 +3,108 @@
 Dated log of build/review/repair decisions for Glimmerdash. Newest entries
 first.
 
+## 2026-09-16 - Batch `05-e2e-headless-smoke-test`
+
+### Decisions
+
+- **Debug hook, not a new game mode**: `src/main.ts` now assigns a
+  read-only `window.__mazeChase` object (`getState()`, `getTick()`,
+  `restart()`) right after `state`/`tick`/`resetGame` are declared.
+  `getState()`/`getTick()` are plain closures over the existing `state`/
+  `tick` module variables (no new fields on `GameState`, no behavioural
+  change), and `restart()` just calls the existing `resetGame()`. This
+  keeps the hook additive and side-effect-free for normal play - it exists
+  purely so the E2E test can read simulation state and trigger a restart
+  deterministically instead of scraping the DOM or guessing timing.
+- **`tick` counter**: a new `let tick = 0` in `main.ts`, incremented once
+  per `state.step()` call inside `frame()` and reset to `0` in
+  `resetGame()`. This is a rendering-layer concern only (not part of
+  `GameState`), so no `src/core/*` file changed.
+- **`data-testid` attributes, not CSS classes, for test hooks**: added
+  `data-testid` to the canvas (`game-canvas`), the two HUD spans
+  (`hud-score`, `hud-lives`), and both overlays (`overlay-game-over`,
+  `overlay-level-complete`) so `tests/e2e/smoke.spec.ts` can locate them
+  via Playwright's `getByTestId`, independent of CSS class names (which
+  are still used for styling and toggling `.hidden`) or visible text.
+- **Chosen movement key**: `tests/e2e/smoke.spec.ts` presses `ArrowUp`
+  because the player spawn tile (`{ x: 11, y: 24 }` in `The Hollow
+  Garden`, confirmed by temporarily running `createInitialState`/`step`
+  under Vitest before writing the test, then discarding that scratch
+  file) has an open, pellet-bearing floor tile directly above it, so one
+  key press both moves the player and increases the score inside the
+  test's 5s `waitForFunction` window.
+- **Vitest/Playwright separation**: `vite.config.ts`'s Vitest `test.include`
+  was already scoped to `tests/**/*.test.ts` (the new spec is named
+  `smoke.spec.ts`, so it was never matched), but an explicit
+  `test.exclude: ['tests/e2e/**', 'node_modules/**']` was added anyway so
+  the separation is explicit and doesn't silently depend on a naming
+  convention.
+- **`playwright.config.ts` builds and serves the real production bundle**:
+  `webServer.command` runs `npm run build && npm run preview -- --port
+  4173 --strictPort`, so the E2E test exercises the same `dist/` output a
+  real user would get, not the dev server. `reuseExistingServer:
+  !process.env.CI` matches the task's spec.
+- **Browser binaries not committed**: `@playwright/test` is a
+  `devDependency` (`package.json`/`package-lock.json` updated); the
+  Chromium binary downloaded by `npx playwright install chromium` lives in
+  the Playwright browser cache outside the repo and was never added to
+  git. `test-results/` and `playwright-report/` were added to
+  `.gitignore` (Playwright's default failure-screenshot/report output
+  dirs); neither existed after this batch's run since all tests passed.
+
+### What was built
+
+- `src/main.ts`: `window.__mazeChase` debug hook (`getState`, `getTick`,
+  `restart`) with an in-file `declare global` augmentation, a `tick`
+  counter, and `data-testid` attributes on the canvas, HUD spans, and both
+  overlays. No rendering or game-loop behaviour changed otherwise.
+- `playwright.config.ts`: headless Chromium project, `testDir:
+  'tests/e2e'`, 30s test timeout, and a `webServer` that builds and serves
+  the production bundle on a fixed port (4173).
+- `tests/e2e/smoke.spec.ts`: three tests - initial render (canvas visible
+  with non-zero size, HUD shows `Score: 0`/`Lives: 3`), keyboard-driven
+  movement (`ArrowUp` from spawn moves the player tile and increases score,
+  polled via `page.waitForFunction` against `window.__mazeChase.getState()`,
+  capped at 5s), and restart (`window.__mazeChase.restart()` resets score
+  to 0, lives to 3, `gameOver` to `false`).
+- `vite.config.ts`: explicit Vitest `exclude` for `tests/e2e/**`.
+- `package.json`/`package-lock.json`: added `@playwright/test` devDependency
+  and `test:e2e`/`test:all` npm scripts.
+- `.gitignore`: added `test-results/` and `playwright-report/`.
+- `README.md`: new "Testing" section covering `npm test`, the one-time
+  `npx playwright install chromium` step, `npm run test:e2e`, and
+  `npm run test:all`; Status section updated to list the E2E smoke test as
+  implemented rather than planned.
+
+### Test results
+
+- `npm run typecheck` (`tsc --noEmit`): exited 0, no errors.
+- `npm run build` (`vite build`): exited 0, produced `dist/`.
+- `npm test` (`vitest run`): exited 0 - **8 test files, 84 tests, all
+  passed** (unchanged from batch `04`; confirms `tests/e2e` is not picked
+  up by Vitest and no `src/core/*` semantics were touched).
+- `npm run test:e2e` (`playwright test`): exited 0 - **3 passed (3.8s)**,
+  running headless Chromium against the built-and-served production
+  bundle:
+  ```
+  Running 3 tests using 1 worker
+
+    ✓  1 [chromium] › tests/e2e/smoke.spec.ts:3:1 › renders the maze, canvas, and initial HUD (495ms)
+    ✓  2 [chromium] › tests/e2e/smoke.spec.ts:16:1 › keyboard input moves the player and collects a pellet (375ms)
+    ✓  3 [chromium] › tests/e2e/smoke.spec.ts:41:1 › restart resets score, lives, and game-over state (336ms)
+
+    3 passed (3.8s)
+  ```
+- `npx playwright install chromium`: succeeded without needing
+  `--with-deps` or sudo; a direct `chromium.launch()` smoke check (run via
+  a scratch script, then deleted) confirmed the browser actually launches
+  in this environment before writing the real spec.
+
+### External generation prompts
+
+None used - no external/Lovable/Fable generation was used for this batch;
+all code was written directly.
+
 ## 2026-09-16 - Batch `04-game-loop-and-rendering`
 
 ### Decisions
