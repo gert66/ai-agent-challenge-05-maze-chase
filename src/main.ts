@@ -82,7 +82,7 @@ empoweredBarWrap.append(empoweredBarFill);
 
 const controlsHint = document.createElement('p');
 controlsHint.className = 'controls-hint';
-controlsHint.textContent = 'Arrows/WASD move · Enter restart/continue · M mute';
+controlsHint.textContent = 'Arrows/WASD move · Enter restart/continue · M mute · Touch controls on mobile';
 
 const LEVEL_INDEX = 0;
 const grid = parseLevel(LEVELS[LEVEL_INDEX].rows);
@@ -94,6 +94,7 @@ const canvas = document.createElement('canvas');
 canvas.width = grid.width * TILE_SIZE_PX;
 canvas.height = grid.height * TILE_SIZE_PX;
 canvas.setAttribute('data-testid', 'game-canvas');
+stage.style.setProperty('--board-width', `${canvas.width}px`);
 
 const flashOverlay = document.createElement('div');
 flashOverlay.className = 'flash-overlay';
@@ -107,7 +108,7 @@ const startPremise = document.createElement('p');
 startPremise.textContent = GAME_TAGLINE;
 const startControls = document.createElement('p');
 startControls.className = 'hint';
-startControls.textContent = 'Arrows/WASD to move · Enter to start/restart · M to mute';
+startControls.textContent = 'Arrows/WASD or the touch pad to move · Enter or Start to begin';
 const startButton = document.createElement('button');
 startButton.type = 'button';
 startButton.className = 'start-button';
@@ -115,7 +116,7 @@ startButton.textContent = 'Start';
 startButton.setAttribute('data-testid', 'start-button');
 const startHint = document.createElement('p');
 startHint.className = 'hint';
-startHint.textContent = 'Press Enter to begin';
+startHint.textContent = 'Tap Start or press Enter to begin';
 startOverlay.append(startTitle, startPremise, startControls, startButton, startHint);
 
 const gameOverOverlay = document.createElement('div');
@@ -124,10 +125,15 @@ gameOverOverlay.setAttribute('data-testid', 'overlay-game-over');
 const gameOverTitle = document.createElement('h2');
 gameOverTitle.textContent = 'Game Over';
 const gameOverScore = document.createElement('p');
+const restartButton = document.createElement('button');
+restartButton.type = 'button';
+restartButton.className = 'start-button';
+restartButton.textContent = 'Play Again';
+restartButton.setAttribute('data-testid', 'restart-button');
 const gameOverHint = document.createElement('p');
 gameOverHint.className = 'hint';
-gameOverHint.textContent = 'Press Enter to try again';
-gameOverOverlay.append(gameOverTitle, gameOverScore, gameOverHint);
+gameOverHint.textContent = 'Tap Play Again or press Enter';
+gameOverOverlay.append(gameOverTitle, gameOverScore, restartButton, gameOverHint);
 
 const levelCompleteOverlay = document.createElement('div');
 levelCompleteOverlay.className = 'overlay overlay-level-complete hidden';
@@ -144,7 +150,28 @@ levelCompleteHint.className = 'hint';
 levelCompleteOverlay.append(levelCompleteTitle, levelCompleteScore, nextLevelButton, levelCompleteHint);
 
 stage.append(canvas, flashOverlay, startOverlay, gameOverOverlay, levelCompleteOverlay);
-app.append(header, hud, empoweredBarWrap, stage, controlsHint);
+
+const touchControls = document.createElement('div');
+touchControls.className = 'touch-controls';
+touchControls.setAttribute('aria-label', 'Touch movement controls');
+touchControls.setAttribute('data-testid', 'touch-controls');
+const touchDirections: Array<[Direction, string]> = [
+  ['up', '▲'],
+  ['left', '◀'],
+  ['down', '▼'],
+  ['right', '▶'],
+];
+for (const [direction, label] of touchDirections) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = `touch-button touch-${direction}`;
+  button.textContent = label;
+  button.setAttribute('aria-label', `Move ${direction}`);
+  button.setAttribute('data-direction', direction);
+  touchControls.append(button);
+}
+
+app.append(header, hud, empoweredBarWrap, stage, touchControls, controlsHint);
 
 const ctx = canvas.getContext('2d');
 if (!ctx) throw new Error('2D canvas context is not available');
@@ -285,6 +312,23 @@ startButton.addEventListener('click', () => {
 nextLevelButton.addEventListener('click', () => {
   unlockAudio();
   advanceToNextLevel();
+});
+
+restartButton.addEventListener('click', () => {
+  unlockAudio();
+  resetGame();
+});
+
+touchControls.addEventListener('pointerdown', (event) => {
+  const target = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-direction]');
+  if (!target) return;
+  const direction = target.dataset.direction as Direction | undefined;
+  if (!direction) return;
+  unlockAudio();
+  if (!started) beginGame();
+  desiredDirection = direction;
+  target.setPointerCapture?.(event.pointerId);
+  event.preventDefault();
 });
 
 window.addEventListener('keydown', (event) => {
